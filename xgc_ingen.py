@@ -166,6 +166,7 @@ class TommsInputGenerator:
         self._run_interface()
 
     def _default_parameters(self):
+        '''
         params = {
             'g_file'  : './input/g184833.04800_new',
             'num_mid' : 1000,
@@ -173,9 +174,18 @@ class TommsInputGenerator:
             'te_file' : './input/te_d184833_4800_pfile_new.prf',
             'ti_file' : './input/ti_d184833_4800_pfile_adj_08.prf',
             'ne_file' : './input/ne_d184833_4800_pfile_new.prf',
-
-
         }
+        '''
+
+        params = {
+            'g_file'  : './input2/g179444.02277',
+            'num_mid' : 1000,
+
+            'te_file' : './input2/179444_T_e',
+            'ti_file' : './input2/179444_T_12C6',
+            'ne_file' : './input2/179444_n_e',
+        }
+
         return params
 
     def _read_equilibrium(self):
@@ -208,22 +218,39 @@ class TommsInputGenerator:
         self.midplane['psin'] = psinmid
 
     def _read_prf(self, filename):
+        print(f"...reading {filename}")
         with open(filename, 'r') as file:
-            #read dimensions
             [n] = map(int, file.readline().strip().split())
-            #allocate array
+
             psi=np.zeros(n)
             var=np.zeros(n)
 
+            lines_read = 0
             for l in range(n):
-                [psi[l], var[l]]=map(float, file.readline().strip().split() )
+                line = file.readline()
+                if not line: # Check for unexpected end of file
+                    raise EOFError(f"Expected {n} data lines, but file ended after {lines_read} lines.")
+                try:
+                    psi[l], var[l] = map(float, line.strip().split())
+                    lines_read += 1
+                except ValueError:
+                    raise ValueError(f"Could not parse line {l+2} as two floats: '{line.strip()}'")
 
-            #read end flag
-            [end_flag]=map(int, file.readline().strip().split())
-            if(end_flag!=-1):
-                print('Error: end flag is not -1. end_flag= %d'%end_flag)
+            # --- Optionally check end flag ---
+            end_flag_line = file.readline()
+            if end_flag_line: # Check if a line was actually read
+                try:
+                    end_flag = int(end_flag_line.strip().split()[0])
+                    if end_flag != -1:
+                        print(f"Warning: Expected end flag -1 in {filename}, but found {end_flag}. Proceeding anyway.")
+                except (ValueError, IndexError):
+                    # Couldn't parse the line as an int, just issue a warning
+                    print(f"Warning: Could not parse end flag line in {filename}: '{end_flag_line.strip()}'. Proceeding anyway.")
+            else:
+                # No end flag line found, which is okay based on your requirement
+                print(f"Warning: No end flag line found in {filename} after reading {n} data points. Proceeding anyway.")
 
-        return psi, var
+            return psi, var
 
     def _read_profiles(self):
         if not self.equilibrium_loaded:
