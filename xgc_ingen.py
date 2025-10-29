@@ -294,7 +294,7 @@ class TommsInputGenerator:
             print(f"{PREFIX_ERRORS}Warning: Config file '{filepath}' not found. Using defaults.")
             return
 
-        print(f">> loading parameters from {filepath}")
+        print(f"\n>> loading parameters from {filepath}")
         config = configparser.ConfigParser()
         try:
             config.read(filepath)
@@ -394,7 +394,7 @@ class TommsInputGenerator:
             print(f"{PREFIX_ERRORS}Warning: Load equilibrium first.")
             return
 
-        print(">> get midplane mapping")
+        print("\n>> get midplane mapping")
 
         # upto limiter
         rmid = np.linspace(self.eq.rmag, np.amax(self.eq.rzlim[:,0]), self.params['num_mid'])
@@ -461,7 +461,7 @@ class TommsInputGenerator:
             print(f"{PREFIX_ERRORS}Warning: Load equilibrium first.")
             return
         try:
-            print(">> load te, ti, ne profiles")
+            print("\n>> load te, ti, ne profiles")
 
             psi_te, te = self._read_prf(self.params['te_file'], 'Te')
             psi_ti, ti = self._read_prf(self.params['ti_file'], 'Ti')
@@ -479,7 +479,7 @@ class TommsInputGenerator:
             print(f"{PREFIX_ERRORS}Warning: Midplane mapping and raw profiles must be loaded first.")
             return
 
-        print(">> interpolate profiles onto midplane grid")
+        print("\n>> interpolate profiles onto midplane grid")
 
         psi_target = self.midplane['psin']
 
@@ -538,7 +538,7 @@ class TommsInputGenerator:
             print(f"{PREFIX_ERRORS}Warning: Interpolated profiles needed")
             return
 
-        print(">> determine resolution")
+        print("\n>> determine resolution")
 
         rmid  = self.midplane['r']
         psin  = self.midplane['psin']
@@ -604,7 +604,7 @@ class TommsInputGenerator:
             print(f"{PREFIX_ERRORS}Warning: Resolution have not been determined yet")
             return
 
-        print(">> generate surfaces")
+        print("\n>> generate surfaces")
 
         rmid        = self.midplane['r']
         psin        = self.midplane['psin']
@@ -693,7 +693,8 @@ class TommsInputGenerator:
             print(f"{PREFIX_ERRORS}Warning: Load equilibrium first.")
             return
 
-        print("\n--- Interactive Wall Editor ---")
+        print("\n>> edit wall")
+        print("--- Interactive Wall Editor ---")
         print(" - Click near a point on the 'Original Limiter' (black line) to add/remove it.")
         print(" - Added points form the 'Simplified Wall' (red line).")
         print(" - Points are added/removed maintaining original order.")
@@ -844,7 +845,7 @@ class TommsInputGenerator:
                 print(f"{PREFIX_ERRORS}Error: there is no limiter information in the Eqdsk {e}")
                 self.wall_generated = False
 
-        print(">> write TOMMS input")
+        print("\n>> write TOMMS input")
 
         rsurf         = self.surface['r']
         nsurf         = len(rsurf)
@@ -914,10 +915,8 @@ class TommsInputGenerator:
 
             self._write_tomms_input()
 
-            print("----------------------------------")
-
             # exiting
-            print(">> Done")
+            print("\n>> Done")
             break
 
 if __name__=='__main__':
