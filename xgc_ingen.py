@@ -12,6 +12,8 @@ PROTON_MASS   = 1.6720e-27  # kg
 ELECTRON_MASS = 9.1094e-31  # kg
 UNIT_CHARGE   = 1.6022e-19  # C
 
+PREFIX_ERRORS = ' * '
+
 # some general helper functions (TODO: make a separate module)
 def is_monotonic(arr):
   diffs = np.diff(arr)
@@ -32,7 +34,7 @@ class Eqdsk:
         while items_read < num:
             line = f.readline()
             if not line: # Check for unexpected end of file
-                raise EOFError(f"Expected {num} values, but reached end of file after reading {items_read}.")
+                raise EOFError(f"{PREFIX_ERRORS}Expected {num} values, but reached end of file after reading {items_read}.")
             # remove newline characters
             line = line.rstrip('\n')
             # calculate how many full items are on this line
@@ -45,7 +47,7 @@ class Eqdsk:
                     try:
                         data[items_read] = float(line[start_index:end_index])
                     except ValueError:
-                        raise ValueError(f"Could not convert '{line[start_index:end_index]}' to float. Line: '{line}'")
+                        raise ValueError(f"{PREFIX_ERRORS}Could not convert '{line[start_index:end_index]}' to float. Line: '{line}'")
                     items_read += 1
                 else:
                     break 
@@ -67,8 +69,8 @@ class Eqdsk:
             # line 1: header and dimensions
             line_str = f.readline()
             line_parts = line_str.split()
-            self.header = line_str[:line_str.rfind(line_parts[-3])].strip() # Get text part
-            self.idum, self.nw, self.nh = map(int, line_parts[-3:]) # mw, mh
+            self.header = line_str[:line_str.rfind(line_parts[-3])].strip() # Get text header part
+            self.idum, self.nw, self.nh = map(int, line_parts[-3:])
 
             # line 2: grid geometry
             line_vals = self._read_1d(f, 5)
@@ -90,7 +92,7 @@ class Eqdsk:
             self.fpol  = self._read_1d(f, self.nw)
             self.pres  = self._read_1d(f, self.nw)
             self.ffp   = self._read_1d(f, self.nw) # F*F'
-            self.pp    = self._read_1d(f, self.nw) # P' 
+            self.pp    = self._read_1d(f, self.nw) # P'. Should add (-) sign in front?
             self.psirz = self._read_2d(f, self.nw, self.nh) # [nw, nh]
             self.q     = self._read_1d(f, self.nw) # q profile
 
@@ -120,7 +122,7 @@ class Eqdsk:
     def construct_area_volume(self):
         print(">> construct area and volume")
         if not hasattr(self, 'rzsep'):
-            print("Warning: No rzsep. Equilibrium data might not be fully processed.")
+            print(f"{PREFIX_ERRORS}Warning: No rzsep. Equilibrium data might not be fully processed.")
             return
 
         # Extract R and Z coordinates of the separatrix polygon vertices
@@ -144,7 +146,7 @@ class Eqdsk:
             R_centroid = np.abs(centroid_sum) / (6.0 * self.area)
             self.volume = 2.0 * np.pi * R_centroid * self.area
         else:
-            print("   Warning: Calculated area is close to zero. Volume calculation skipped.")
+            print(f"{PREFIX_ERRORS}Warning: Calculated area is close to zero. Volume calculation skipped.")
             R_centroid = np.mean(R) # Fallback, might not be accurate
             self.volume = 0.0
 
@@ -200,7 +202,7 @@ class TommsInputGenerator:
         # setups
         self.params = self._default_parameters()
 
-        self.eq = None
+        self.eq          = None
         self.midplane    = {}
         self.prof        = {}
         self.prof_interp = {}
@@ -216,32 +218,21 @@ class TommsInputGenerator:
         self.resolution_determined = False
         self.surface_generated     = False
         self.wall_generated        = False
-        self.files_written         = False
+        self.files_written         = {'surf': False, 
+                                      'dpol': False,
+                                      'wall': False}
 
         # interactive loop
         self._run_interface()
 
     def _default_parameters(self):
-        '''
         params = {
-            'g_file'  : './input/g184833.04800_new',
+            'g_file'  : './inputs/g184833.04800_new',
 
-            'te_file' : './input/te_d184833_4800_pfile_new.prf',
-            'ti_file' : './input/ti_d184833_4800_pfile_adj_08.prf',
-            'ne_file' : './input/ne_d184833_4800_pfile_new.prf',
+            'te_file' : './inputs/te_d184833_4800_pfile_new.prf',
+            'ti_file' : './inputs/ti_d184833_4800_pfile_adj_08.prf',
+            'ne_file' : './inputs/ne_d184833_4800_pfile_new.prf',
         }
-        '''
-
-        params = {
-            'g_file'  : './input2/g179444.02277',
-
-            'te_file' : './input2/179444_T_e',
-            'ti_file' : './input2/179444_T_12C6',
-            'ne_file' : './input2/179444_n_e',
-        }
-
-        # ad-hoc to test TCV
-        #params['g_file'] = './input3/EQDSK_51392t0.6000_COCOS02_original'
 
         # general settings
         params['num_mid']        = 1000
@@ -249,7 +240,7 @@ class TommsInputGenerator:
         params['dr_scale_fac']   = [2.0, 2.0, 1.2, 1.0, 1.0, 1.0, 1.2,  1.5,  4.0, 12.0]
         params['dr_min']         = 1e-3 # m
         params['pol_scale_fac']  = 1.3
-        params['pol_core_reduction_fac'] = 1.0 # not sure how useful this is
+        params['pol_core_reduction_fac'] = 1.0 # 0.3
 
         # outputs
         params['output_dir']       = './outputs'
@@ -264,14 +255,14 @@ class TommsInputGenerator:
             self.eq = Eqdsk(self.params['g_file'])
             self.equilibrium_loaded = True
         except Exception as e:
-            print(f"Error loading equilibrium file: {e}")
+            print(f"{PREFIX_ERRORS}Error loading equilibrium file: {e}")
             self.equilibrium_loaded = False
 
         self.eq.plot_overview()
 
     def _get_midplane_mapping(self):
         if not self.equilibrium_loaded:
-            print("Warning: Load equilibrium first.")
+            print(f"{PREFIX_ERRORS}Warning: Load equilibrium first.")
             return
 
         print(">> get midplane mapping")
@@ -294,7 +285,7 @@ class TommsInputGenerator:
         psinmid[0] = 0.0
 
         if not is_monotonic(psinmid):
-            print("Warning: midplane['psin'] is not monotonic")
+            print(f"{PREFIX_ERRORS}Warning: midplane['psin'] is not monotonic")
 
         self.midplane['r']    = rmid
         self.midplane['z']    = zmid
@@ -314,12 +305,12 @@ class TommsInputGenerator:
             for l in range(n):
                 line = file.readline()
                 if not line: # Check for unexpected end of file
-                    raise EOFError(f"Expected {n} data lines, but file ended after {lines_read} lines.")
+                    raise EOFError(f"{PREFIX_ERRORS}Expected {n} data lines, but file ended after {lines_read} lines.")
                 try:
                     psi[l], var[l] = map(float, line.strip().split())
                     lines_read += 1
                 except ValueError:
-                    raise ValueError(f"Could not parse line {l+2} as two floats: '{line.strip()}'")
+                    raise ValueError(f"{PREFIX_ERRORS}Could not parse line {l+2} as two floats: '{line.strip()}'")
 
             # --- Optionally check end flag ---
             end_flag_line = file.readline()
@@ -327,18 +318,18 @@ class TommsInputGenerator:
                 try:
                     end_flag = int(end_flag_line.strip().split()[0])
                     if end_flag != -1:
-                        print(f"Warning: Expected end flag -1 in {filename}, but found {end_flag}.\n...Proceeding anyway.")
+                        print(f"{PREFIX_ERRORS}Warning: Expected end flag -1 in {filename}, but found {end_flag}.\n...Proceeding anyway.")
                 except (ValueError, IndexError):
-                    print(f"Warning: Could not parse end flag line in {filename}: '{end_flag_line.strip()}'.\n...Proceeding anyway.")
+                    print(f"{PREFIX_ERRORS}Warning: Could not parse end flag line in {filename}: '{end_flag_line.strip()}'.\n...Proceeding anyway.")
             else:
                 # No end flag line found, which is okay based on your requirement
-                print(f"Warning: No end flag line found in {filename} after reading {n} data points.\n...Proceeding anyway.")
+                print(f"{PREFIX_ERRORS}Warning: No end flag line found in {filename} after reading {n} data points.\n...Proceeding anyway.")
 
             return psi, var
 
     def _read_profiles(self):
         if not self.equilibrium_loaded:
-            print("Warning: Load equilibrium first.")
+            print(f"{PREFIX_ERRORS}Warning: Load equilibrium first.")
             return
         try:
             print(">> load te, ti, ne profiles")
@@ -351,12 +342,12 @@ class TommsInputGenerator:
                          'psi_ne': psi_ne, 'ne': ne}
             self.profiles_loaded = True
         except Exception as e:
-            print(f"Error loading profile files: {e}")
+            print(f"{PREFIX_ERRORS}Error loading profile files: {e}")
             self.profiles_loaded = False        
 
     def _interpolate_profiles(self):
         if not self.midplane_setted or not self.profiles_loaded:
-            print("Warning: Midplane mapping and raw profiles must be loaded first.")
+            print(f"{PREFIX_ERRORS}Warning: Midplane mapping and raw profiles must be loaded first.")
             return
 
         print(">> interpolate profiles onto midplane grid")
@@ -389,7 +380,7 @@ class TommsInputGenerator:
 
     def plot_profiles(self):
         if not self.profiles_loaded:
-            print("Warning: Profiles to plot have not been loaded yet")
+            print(f"{PREFIX_ERRORS}Warning: Profiles to plot have not been loaded yet")
             return
 
         fig,ax = plt.subplots(figsize=(7,5))
@@ -415,7 +406,7 @@ class TommsInputGenerator:
 
     def _determine_resolutions(self):
         if not self.profiles_interpolated:
-            print("Warning: Interpolated profiles needed")
+            print(f"{PREFIX_ERRORS}Warning: Interpolated profiles needed")
             return
 
         print(">> determine resolution")
@@ -457,7 +448,7 @@ class TommsInputGenerator:
 
     def plot_resolutions(self):
         if not self.resolution_determined:
-            print("Warning: Resolutions have not been determined yet")
+            print(f"{PREFIX_ERRORS}Warning: Resolutions have not been determined yet")
             return
 
         rmid      = self.midplane['r']
@@ -481,7 +472,7 @@ class TommsInputGenerator:
 
     def _generate_surfaces(self):
         if not self.resolution_determined:
-            print("Warning: Resolution have not been determined yet")
+            print(f"{PREFIX_ERRORS}Warning: Resolution have not been determined yet")
             return
 
         print(">> generate surfaces")
@@ -547,7 +538,7 @@ class TommsInputGenerator:
 
     def plot_surfaces(self):
         if not self.surface_generated:
-            print("Warning: Surfaces have not been determined yet")
+            print(f"{PREFIX_ERRORS}Warning: Surfaces have not been determined yet")
             return
 
         rsurf         = self.surface['r']
@@ -568,16 +559,157 @@ class TommsInputGenerator:
         plt.show()
 
     # TODO: generate wall file from extenally given information than included in Eqdsk
-    def _generate_wall(self):
+    def _edit_wall_interactive(self):
         if not self.equilibrium_loaded:
-            print("Warning: Load equilibrium first.")
+            print(f"{PREFIX_ERRORS}Warning: Load equilibrium first.")
             return
-        
+
+        print("\n--- Interactive Wall Editor ---")
+        print("Instructions:")
+        print(" - Click near a point on the 'Original Limiter' (black line) to add/remove it.")
+        print(" - Added points form the 'Simplified Wall' (red line).")
+        print(" - Points are added/removed maintaining original order.")
+        print(" - Close the plot window when finished.")
+        print("-------------------------------\n")
+
+        # --- Setup Plot ---
+        fig, ax = plt.subplots(figsize=(8, 10))
+        original_limiter_r = self.eq.rzlim[:, 0]
+        original_limiter_z = self.eq.rzlim[:, 1]
+
+        # Plot psi contour for guidance
+        cntr = ax.contour(self.eq.r, self.eq.z, self.eq.psinrz.T, levels=np.linspace(0, 1.2, 61)) # Transpose psinrz
+        fig.colorbar(cntr, ax=ax, label='Normalized Poloidal Flux ($\psi_N$)')
+        ax.plot(self.eq.rzsep[:, 0], self.eq.rzsep[:, 1], 'tab:orange', linewidth=2, label='Separatrix')
+        ax.plot(self.eq.rmag, self.eq.zmag, 'kx', markersize=10, mew=2, label='Magnetic Axis')
+
+        # Plot original limiter - store handle for hover effects if desired later
+        ax.plot(original_limiter_r, original_limiter_z, 'k.-', label='Original Limiter', markersize=4)
+
+        # Plot currently selected points (initially empty) - store line handle
+        selected_line, = ax.plot([], [], 'ro-', label='Simplified Wall (Click to add)', markersize=6)
+
+        ax.set_xlabel('R [m]')
+        ax.set_ylabel('Z [m]')
+        ax.set_title('Interactive Wall Selection\n(Close window when done)')
+        ax.axis('equal')
+        ax.legend()
+        ax.grid(True, alpha=0.5)
+
+        # --- Interactive ---
+        self.wall = {} # Reset selected points for this session
+        selected_indices = set() # Keep track of indices added
+
+        def onclick(event):
+            if event.inaxes != ax: return # Ignore clicks outside the plot area
+            if event.button != 1: return # Ignore right/middle clicks
+
+            click_r, click_z = event.xdata, event.ydata
+            if click_r is None or click_z is None: return # Ignore clicks outside data range
+
+            # Calculate distance from click to all original limiter points
+            distances = np.sqrt((original_limiter_r - click_r)**2 + (original_limiter_z - click_z)**2)
+
+            # Find the index of the closest original point
+            idx_min = np.argmin(distances)
+            min_dist = distances[idx_min]
+
+            # Define a tolerance margin (adjust as needed, depends on plot scale)
+            # Example: 0.5% of the plot's R-range
+            r_range = ax.get_xlim()[1] - ax.get_xlim()[0]
+            margin = 0.05 * r_range # 1% margin
+
+            if min_dist < margin:
+                # add clicked points
+                if idx_min not in selected_indices: # add clicked point
+                    print(f"Adding point {idx_min}: (R={original_limiter_r[idx_min]:.3f}, Z={original_limiter_z[idx_min]:.3f})")
+                    selected_indices.add(idx_min)
+                else: # remove if already selected
+                    print(f"Removing point {idx_min}")
+                    selected_indices.remove(idx_min)
+
+                # Rebuild the simplified wall list, maintaining original order
+                if len(selected_indices)>0:
+                    sorted_indices = sorted(list(selected_indices))
+                    self.wall['r'] = self.eq.rzlim[sorted_indices,0]
+                    self.wall['z'] = self.eq.rzlim[sorted_indices,1]
+                else:
+                    self.wall = {} # empty if no indices selected
+
+                # Update the plot data for the red line
+                if len(self.wall['r']) > 0:
+                    selected_line.set_data(self.wall['r'], self.wall['z'])
+                else:
+                    selected_line.set_data([], [])
+
+                # Redraw the canvas
+                fig.canvas.draw_idle()
+            else:
+                print("Click is too far from any point. Try clicking closer.")
+
+        # Connect the click event handler
+        cid = fig.canvas.mpl_connect('button_press_event', onclick)
+
+        # Show the plot - execution pauses here until the window is closed
+        plt.show(block=True)
+
+        # Disconnect the event handler after the plot is closed
+        fig.canvas.mpl_disconnect(cid)
+
+        # Convert list of points to a NumPy array after closing
+        if len(self.wall['r']) > 0:
+            self.wall['r'] = np.array(self.wall['r'])
+            self.wall['z'] = np.array(self.wall['z'])
+
+            # Append the first point to the end if it's not already the same
+            first_point = [self.wall['r'][0], self.wall['z'][0]]
+            last_point  = [self.wall['r'][-1], self.wall['z'][-1]]
+            if not np.allclose(first_point, last_point):
+                 self.wall['r'] = np.append(self.wall['r'], self.wall['r'][0])
+                 self.wall['z'] = np.append(self.wall['z'], self.wall['z'][0])
+                 print("... Loop closed by appending the first point.")
+
+            self.wall_curve_generated = True
+            print(f"\nFinished selection. Simplified wall has {len(self.wall['r'])} points (loop closed).")
+
+            # Plot the final closed loop
+            fig_final, ax_final = plt.subplots(figsize=(8, 10))
+
+            cntr = ax_final.contour(self.eq.r, self.eq.z, self.eq.psinrz.T, levels=np.linspace(0, 1.2, 61)) # Transpose psinrz
+            fig.colorbar(cntr, ax=ax_final, label='Normalized Poloidal Flux ($\psi_N$)')
+            ax_final.plot(self.eq.rzsep[:, 0], self.eq.rzsep[:, 1], 'tab:orange', linewidth=2, label='Separatrix')
+            ax_final.plot(self.eq.rmag, self.eq.zmag, 'kx', markersize=10, mew=2, label='Magnetic Axis')
+
+            ax_final.plot(original_limiter_r, original_limiter_z, 'k.-', label='Original Limiter', markersize=4, alpha=0.3)
+            ax_final.plot(self.wall['r'], self.wall['z'], 'ro-', label='Final Simplified Wall (Closed)', markersize=6)
+            ax_final.scatter(first_point[0], first_point[1], facecolors='none', edgecolors='b')
+            ax_final.set_xlabel('R [m]')
+            ax_final.set_ylabel('Z [m]')
+            ax_final.set_title('Final Selected Wall Curve')
+            ax_final.axis('equal')
+            ax_final.legend()
+            ax_final.grid(True, alpha=0.5)
+            plt.show()
+
+            self.wall_generated = True
+        else:
+            self.wall_generated = False
+            print("\nFinished selection. No points selected for simplified wall.")
 
     def _write_tomms_input(self):
         if not self.surface_generated:
-            print("Warning: Surfaces have not been determined yet")
+            print(f"{PREFIX_ERRORS}Warning: Surfaces have not been determined yet")
             return
+
+        if not self.wall_generated:
+            print(f"{PREFIX_ERRORS}Warning: no simplified wall curve has been generated. Using rzlim in Eqdsk.")
+            try:
+                self.wall['r'] = self.eq.rzlim[:,0]
+                self.wall['z'] = self.eq.rzlim[:,1]
+                self.wall_generated = True
+            except Exception as e: # TODO: add functionality for external wall file
+                print(f"{PREFIX_ERRORS}Error: there is no limiter information in the Eqdsk {e}")
+                self.wall_generated = False
 
         print(">> write TOMMS input")
 
@@ -591,6 +723,7 @@ class TommsInputGenerator:
 
         surf_file  = output_dir / self.params['output_surf_file']
         dpol_file  = output_dir / self.params['output_dpol_file']
+        wall_file  = output_dir / self.params['output_wall_file']
 
         # surface file
         try:
@@ -599,8 +732,9 @@ class TommsInputGenerator:
                 for val in psurf_renorm:
                     f.write(f"{val:22.12e}\n")
             print(f"... {surf_file}")
+            self.files_written['surf'] = True
         except Exception as e:
-            print(f"Error writing {surf_file}: {e}")
+            print(f"{PREFIX_ERRORS}Error writing {surf_file}: {e}")
             return       
 
         # dpol file
@@ -610,12 +744,26 @@ class TommsInputGenerator:
                 for i in range(nsurf):
                     f.write(f"{psurf_renorm[i]:22.12e}   {pol_dist[i]:22.12e}\n")
             print(f"... {dpol_file}")
-            self.files_written = True 
+            self.files_written['dpol'] = True 
         except Exception as e:
-            print(f"Error writing {dpol_file}: {e}")
+            print(f"{PREFIX_ERRORS}Error writing {dpol_file}: {e}")
+
+        # wall file
+        if self.wall_generated:
+            try:
+                nwall = len(self.wall['r'])
+                with open(wall_file, 'w') as f:
+                    f.write(f"{nwall}\n")
+                    for i in range(nwall):
+                        f.write(f"{self.wall['r'][i]:22.12e}   {self.wall['z'][i]:22.12e}\n")
+                print(f"... {wall_file}")
+                self.files_written['wall'] = True 
+            except Exception as e:
+                print(f"{PREFIX_ERRORS}Error writing {wall_file}: {e}")
 
     def _run_interface(self):
         while True:
+            # TODO: load config.in to recover previous run
             status_eq = 'yes' if self.equilibrium_loaded else 'no'
             print("##################################")
             print("#      TOMMS Input Generator     #")
@@ -638,6 +786,8 @@ class TommsInputGenerator:
 
             self._generate_surfaces()
             self.plot_surfaces()
+
+            self._edit_wall_interactive()
 
             self._write_tomms_input()
 
