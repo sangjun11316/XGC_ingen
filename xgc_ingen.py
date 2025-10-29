@@ -763,17 +763,11 @@ class TommsInputGenerator:
 
     def _run_interface(self):
         while True:
-            # TODO: load config.in to recover previous run
-            status_eq = 'yes' if self.equilibrium_loaded else 'no'
             print("##################################")
             print("#      TOMMS Input Generator     #")
             print("##################################")
-            print("\n### Status ###")
-            print(f" Eq: [{status_eq}]")
 
-            # TODO: separate by 'choices'
-            print("\n### Main ###")
-
+            # main
             self._read_equilibrium()
             self._get_midplane_mapping()
 
