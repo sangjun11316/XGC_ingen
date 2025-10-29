@@ -19,6 +19,37 @@ def is_monotonic(arr):
   diffs = np.diff(arr)
   return np.all(diffs >= 0) or np.all(diffs <= 0)
 
+def densify_line(r_coords, z_coords, max_seg_length):
+    new_r = [r_coords[0]]
+    new_z = [z_coords[0]]
+    
+    # Iterate over each segment (from point i to i+1)
+    for i in range(len(r_coords) - 1):
+        r1, z1 = r_coords[i], z_coords[i]
+        r2, z2 = r_coords[i+1], z_coords[i+1]
+        
+        # Calculate the length of this segment
+        dist = np.sqrt((r2 - r1)**2 + (z2 - z1)**2)
+        
+        if dist > max_seg_length:
+            # If segment is too long, subdivide it
+            num_segments = int(np.ceil(dist / max_seg_length))
+            
+            # Generate new points using linspace
+            # We skip the first point [0] because it's r1/z1 (already added)
+            r_interp = np.linspace(r1, r2, num_segments + 1)[1:]
+            z_interp = np.linspace(z1, z2, num_segments + 1)[1:]
+            
+            new_r.extend(r_interp)
+            new_z.extend(z_interp)
+        else:
+            # Segment is short enough, just add the end point
+            new_r.append(r2)
+            new_z.append(z2)
+            
+    return np.array(new_r), np.array(new_z)
+
+
 class Eqdsk:
     def __init__(self, filename):
         self.filename = filename
@@ -572,10 +603,14 @@ class TommsInputGenerator:
         print(" - Close the plot window when finished.")
         print("-------------------------------\n")
 
+        # Define a desired resolution.
+        # e.g. 0.5% of the total R-width of the plot
+        f_densify = 0.05
+        max_seg_length = f_densify * (np.max(self.eq.rzlim[:,0]) - np.min(self.eq.rzlim[:,0]))
+        original_limiter_r, original_limiter_z = densify_line(self.eq.rzlim[:,0], self.eq.rzlim[:,1] ,max_seg_length)
+
         # --- Setup Plot ---
         fig, ax = plt.subplots(figsize=(8, 10))
-        original_limiter_r = self.eq.rzlim[:, 0]
-        original_limiter_z = self.eq.rzlim[:, 1]
 
         # Plot psi contour for guidance
         cntr = ax.contour(self.eq.r, self.eq.z, self.eq.psinrz.T, levels=np.linspace(0, 1.2, 61)) # Transpose psinrz
@@ -584,7 +619,8 @@ class TommsInputGenerator:
         ax.plot(self.eq.rmag, self.eq.zmag, 'kx', markersize=10, mew=2, label='Magnetic Axis')
 
         # Plot original limiter - store handle for hover effects if desired later
-        ax.plot(original_limiter_r, original_limiter_z, 'k.-', label='Original Limiter', markersize=4)
+        ax.scatter(original_limiter_r, original_limiter_z, c='gray', label=f'densified ({f_densify*100:.1f}%)', s=8)
+        ax.plot(self.eq.rzlim[:,0], self.eq.rzlim[:,1], 'k.-', label='Original Limiter', markersize=4)
 
         # Plot currently selected points (initially empty) - store line handle
         selected_line, = ax.plot([], [], 'ro-', label='Simplified Wall (Click to add)', markersize=6)
@@ -631,8 +667,8 @@ class TommsInputGenerator:
                 # Rebuild the simplified wall list, maintaining original order
                 if len(selected_indices)>0:
                     sorted_indices = sorted(list(selected_indices))
-                    self.wall['r'] = self.eq.rzlim[sorted_indices,0]
-                    self.wall['z'] = self.eq.rzlim[sorted_indices,1]
+                    self.wall['r'] = original_limiter_r[sorted_indices]
+                    self.wall['z'] = original_limiter_z[sorted_indices]
                 else:
                     self.wall = {} # empty if no indices selected
 
@@ -657,7 +693,7 @@ class TommsInputGenerator:
         fig.canvas.mpl_disconnect(cid)
 
         # Convert list of points to a NumPy array after closing
-        if len(self.wall['r']) > 0:
+        if self.wall:
             self.wall['r'] = np.array(self.wall['r'])
             self.wall['z'] = np.array(self.wall['z'])
 
