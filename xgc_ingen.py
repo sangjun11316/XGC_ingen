@@ -302,7 +302,8 @@ class TommsInputGenerator:
             print(f"{PREFIX_ERRORS}Error parsing config file '{filepath}': {e}")
             return
 
-        keys_overridden = 0
+        default_keys   = set(self.params.keys())
+        overriden_keys = set()
         
         for section in config.sections():
             for key in config[section]:
@@ -340,23 +341,30 @@ class TommsInputGenerator:
 
                     # 5. Success: Override the parameter
                     self.params[key] = parsed_value
-                    keys_overridden += 1
+
+                    overriden_keys.add(key)
 
                 except Exception as e:
                     # Handle errors (e.g., casting 'hello' to int)
                     print(f"{PREFIX_ERRORS}Error parsing key '{key}' with value '{value_str}'. "
                           f"{PREFIX_ERRORS}Expected type {default_type}. Error: {e}")
 
-        if keys_overridden == 0:
-            print(f"{PREFIX_ERRORS}Warning: Config file '{filepath}' was found, but no matching parameters were overridden.")
+        keys_left_as_default = default_keys - overriden_keys
+        if keys_left_as_default:
+            print("... following parameters were left as default:")
+            for key in self.params.keys():
+                if key in keys_left_as_default:
+                    print(f"  - {key}")
+        else:
+            print("... all default parameters were set by the config file.")
 
     def print_parameters(self):
         print("-------  Parameters -------")
         # Find the longest key for alignment
         max_len = max(len(key) for key in self.params) + 2 # Add 2 for padding
         
-        # Loop through sorted keys and print
-        for key in sorted(self.params.keys()):
+        # Loop through keys and print
+        for key in self.params.keys():
             value = self.params[key]
             
             value_str = ""
