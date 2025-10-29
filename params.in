@@ -1,0 +1,22 @@
+[TOMMS ingen parameters]
+
+# discharge
+g_file  = ./inputs/g184833.04800_new
+te_file = ./inputs/te_d184833_4800_pfile_new.prf
+ti_file = ./inputs/ti_d184833_4800_pfile_adj_08.prf
+ne_file = ./inputs/ne_d184833_4800_pfile_new.prf
+
+# general parameters
+num_mid       = 1000
+dr_scale_psin = 0.0, 0.2, 0.3, 0.6, 0.8, 1.0, 1.05, 1.07, 1.1, 1.2
+dr_scale_fac  = 2.0, 2.0, 1.2, 1.0, 1.0, 1.0, 1.2,  1.5,  4.0, 12.0
+dr_min        = 1e-3
+pol_scale_fac = 1.3
+
+pol_core_reduction_fac = 1.0
+
+# output
+output_dir       = ./outputs
+output_surf_file = surf_xgc1.txt
+output_dpol_file = dpol_xgc1.txt
+output_wall_file = wallcurve.txt

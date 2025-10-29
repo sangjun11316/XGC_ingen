@@ -8,6 +8,8 @@ import matplotlib.pyplot as plt
 from scipy.interpolate import interp1d, interp2d, RectBivariateSpline # RectBivariateSpline is often better than interp2d
 from pathlib import Path
 
+import configparser
+
 PROTON_MASS   = 1.6720e-27  # kg
 ELECTRON_MASS = 9.1094e-31  # kg
 UNIT_CHARGE   = 1.6022e-19  # C
@@ -49,10 +51,10 @@ def densify_line(r_coords, z_coords, max_seg_length):
             
     return np.array(new_r), np.array(new_z)
 
-
 class Eqdsk:
     def __init__(self, filename):
         self.filename = filename
+        print(f">> EQDSK")
         print(f">> load g-file: {self.filename}")
 
         self._read_gfile()
@@ -215,7 +217,7 @@ class Eqdsk:
         print("----------------------------------")
 
         fig,ax = plt.subplots(figsize=(8, 10))
-        cntr = ax.contour(self.r, self.z, self.psinrz.T, levels=np.linspace(0, 1.2, 61)) # Transpose psinrz
+        cntr = ax.contour(self.r, self.z, self.psinrz.T, levels=np.linspace(0, 1.2, 101)) # Transpose psinrz
         fig.colorbar(cntr, ax=ax, label='Normalized Poloidal Flux ($\psi_N$)')
         ax.plot(self.rzsep[:, 0], self.rzsep[:, 1], 'tab:orange', linewidth=2, label='Separatrix')
         ax.plot(self.rzlim[:, 0], self.rzlim[:, 1], 'k', linewidth=2, label='Limiter')
@@ -230,8 +232,14 @@ class Eqdsk:
 
 class TommsInputGenerator:
     def __init__(self):
+        print("##################################")
+        print("#      TOMMS Input Generator     #")
+        print("##################################")
+
         # setups
         self.params = self._default_parameters()
+        self._load_parameters(filepath='./params.in')
+        self.print_parameters()
 
         self.eq          = None
         self.midplane    = {}
@@ -280,6 +288,96 @@ class TommsInputGenerator:
         params['output_wall_file'] = 'wallcurve.txt'
     
         return params
+
+    def _load_parameters(self, filepath='./params.in'):
+        if not os.path.exists(filepath):
+            print(f"{PREFIX_ERRORS}Warning: Config file '{filepath}' not found. Using defaults.")
+            return
+
+        print(f">> loading parameters from {filepath}")
+        config = configparser.ConfigParser()
+        try:
+            config.read(filepath)
+        except configparser.Error as e:
+            print(f"{PREFIX_ERRORS}Error parsing config file '{filepath}': {e}")
+            return
+
+        keys_overridden = 0
+        
+        for section in config.sections():
+            for key in config[section]:
+                # 1. Check if key is valid (matches a default)
+                if key not in self.params:
+                    print(f"{PREFIX_ERRORS}Warning: Unknown key '{key}' in config. Ignoring.")
+                    continue  # Skip to the next key
+
+                # 2. Get the string value from config
+                value_str = config[section][key]
+                
+                # 3. Get the type from the default parameter
+                default_val = self.params[key]
+                default_type = type(default_val)
+
+                try:
+                    # 4. Parse the string based on the default's type
+                    if isinstance(default_val, bool):
+                        # Use configparser's built-in boolean handler
+                        parsed_value = config[section].getboolean(key)
+                    
+                    elif isinstance(default_val, list):
+                        # Get element type from default list (if list isn't empty)
+                        el_type = type(default_val[0]) if default_val else str
+                        # Split by comma, strip whitespace, and cast each element
+                        parsed_value = [el_type(v.strip()) for v in value_str.split(',')]
+                    
+                    elif isinstance(default_val, (int, float, str)):
+                        # Simple direct cast for int, float, or str
+                        parsed_value = default_type(value_str)
+                    
+                    else:
+                        # Fallback for other types (less common)
+                        parsed_value = default_type(value_str)
+
+                    # 5. Success: Override the parameter
+                    self.params[key] = parsed_value
+                    keys_overridden += 1
+
+                except Exception as e:
+                    # Handle errors (e.g., casting 'hello' to int)
+                    print(f"{PREFIX_ERRORS}Error parsing key '{key}' with value '{value_str}'. "
+                          f"{PREFIX_ERRORS}Expected type {default_type}. Error: {e}")
+
+        if keys_overridden == 0:
+            print(f"{PREFIX_ERRORS}Warning: Config file '{filepath}' was found, but no matching parameters were overridden.")
+
+    def print_parameters(self):
+        print("-------  Parameters -------")
+        # Find the longest key for alignment
+        max_len = max(len(key) for key in self.params) + 2 # Add 2 for padding
+        
+        # Loop through sorted keys and print
+        for key in sorted(self.params.keys()):
+            value = self.params[key]
+            
+            value_str = ""
+
+            # to format lists aligned
+            if (isinstance(value, list) and 
+                value and 
+                all(isinstance(x, (int, float)) for x in value)):
+                
+                formatted_list = [f"{x:5.2f}" for x in value]
+                
+                # Join them back into a string
+                value_str = "[" + ", ".join(formatted_list) + "]"
+            
+            else:
+                # For everything else (strings, single ints, etc.), just use str()
+                value_str = str(value)
+
+            print(f"  {key:<{max_len}} = {value_str}")
+            
+        print("---------------------------\n")
 
     def _read_equilibrium(self):
         try: 
@@ -596,7 +694,6 @@ class TommsInputGenerator:
             return
 
         print("\n--- Interactive Wall Editor ---")
-        print("Instructions:")
         print(" - Click near a point on the 'Original Limiter' (black line) to add/remove it.")
         print(" - Added points form the 'Simplified Wall' (red line).")
         print(" - Points are added/removed maintaining original order.")
@@ -613,7 +710,7 @@ class TommsInputGenerator:
         fig, ax = plt.subplots(figsize=(8, 10))
 
         # Plot psi contour for guidance
-        cntr = ax.contour(self.eq.r, self.eq.z, self.eq.psinrz.T, levels=np.linspace(0, 1.2, 61)) # Transpose psinrz
+        cntr = ax.contour(self.eq.r, self.eq.z, self.eq.psinrz.T, levels=np.linspace(0, 1.2, 101)) # Transpose psinrz
         fig.colorbar(cntr, ax=ax, label='Normalized Poloidal Flux ($\psi_N$)')
         ax.plot(self.eq.rzsep[:, 0], self.eq.rzsep[:, 1], 'tab:orange', linewidth=2, label='Separatrix')
         ax.plot(self.eq.rmag, self.eq.zmag, 'kx', markersize=10, mew=2, label='Magnetic Axis')
@@ -799,10 +896,6 @@ class TommsInputGenerator:
 
     def _run_interface(self):
         while True:
-            print("##################################")
-            print("#      TOMMS Input Generator     #")
-            print("##################################")
-
             # main
             self._read_equilibrium()
             self._get_midplane_mapping()
