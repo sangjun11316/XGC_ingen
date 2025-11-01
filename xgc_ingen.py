@@ -265,13 +265,12 @@ class TommsInputGenerator:
         self._run_interface()
 
     def _default_parameters(self):
-        params = {
-            'g_file'  : './inputs/g184833.04800_new',
+        params = {}
 
-            'te_file' : './inputs/te_d184833_4800_pfile_new.prf',
-            'ti_file' : './inputs/ti_d184833_4800_pfile_adj_08.prf',
-            'ne_file' : './inputs/ne_d184833_4800_pfile_new.prf',
-        }
+        params['g_file']  = './inputs/g184833.04800_new'
+        params['te_file'] = './inputs/te_d184833_4800_pfile_new.prf'
+        params['ti_file'] = './inputs/ti_d184833_4800_pfile_adj_08.prf'
+        params['ne_file'] = './inputs/ne_d184833_4800_pfile_new.prf'
 
         # general settings
         params['num_mid']        = 1000
