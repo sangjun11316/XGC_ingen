@@ -1,7 +1,7 @@
-import sys
-import os
+import sys, os
+import numpy as np
 
-def process_file(input_filepath):
+def process_file(input_filepath, factor):
     """
     Reads a data file, extracts the 3rd and 4th columns,
     and writes them to a new .prf file with a header count
@@ -37,11 +37,11 @@ def process_file(input_filepath):
                 # Make sure the line has enough columns
                 if len(parts) >= 4:
                     # Extract the 3rd (index 2) and 4th (index 3) columns
-                    col_3 = parts[2]
-                    col_4 = parts[3]
+                    col_3 = float(parts[2])
+                    col_4 = float(parts[3]) * factor
                     
                     # Store the formatted string
-                    data_to_write.append(f"{col_3} {col_4}")
+                    data_to_write.append(f"{col_3:20.10e} {col_4:20.10e}")
                 else:
                     print(f"Warning: Skipping malformed line: {line_content}")
 
@@ -72,14 +72,15 @@ def process_file(input_filepath):
 
 if __name__ == "__main__":
     # 1. Check if the user provided exactly one argument
-    if len(sys.argv) != 2:
-        print(f"Usage: python {sys.argv[0]} [input_filename]")
-        print(f"Example: python {sys.argv[0]} my_data.txt")
+    if len(sys.argv) != 3:
+        print(f"Usage: python {sys.argv[0]} [input_filename] [factor]")
+        print(f"Example: python {sys.argv[0]} my_data.txt 1.0")
         sys.exit(1) # Exit with an error code
 
     # 2. Get input file from the command-line argument
-    INPUT_FILE = sys.argv[1]
-    
+    INPUT_FILE = sys.argv[1] 
+    FACTOR = float(sys.argv[2])
+ 
     # 3. Run the processing function
-    process_file(INPUT_FILE)
+    process_file(INPUT_FILE, FACTOR)
 

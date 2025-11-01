@@ -272,6 +272,9 @@ class TommsInputGenerator:
         params['ti_file'] = './inputs/ti_d184833_4800_pfile_adj_08.prf'
         params['ne_file'] = './inputs/ne_d184833_4800_pfile_new.prf'
 
+        # if external wall input
+        params['wall_file'] = ''
+
         # general settings
         params['num_mid']        = 1000
         params['dr_scale_psin']  = [0.0, 0.2, 0.3, 0.6, 0.8, 1.0, 1.05, 1.07, 1.1, 1.2]
@@ -401,6 +404,19 @@ class TommsInputGenerator:
             print(f"{PREFIX_ERRORS}Warning: Load equilibrium first.")
             return
 
+        if self.eq.rzlim.size == 0:
+            print(f"{PREFIX_ERRORS}Warning: No limiter information in the Eqdsk")
+
+            if self.params['wall_file']:
+                print(f"{PREFIX_ERRORS}Warning: Reading external wall file {self.params['wall_file']}")
+                try:
+                    self.eq.rzlim = np.stack(self._read_prf(self.params['wall_file'], 'wall'), axis=1)
+                except ValueError:
+                    raise ValueError(f"...failed to read wall file {self.params['wall_file']}")
+
+            else:
+                raise ValueError(f"{PREFIX_ERRORS}Error: no wall information neither from EQDSK nor externally given")
+
         print("\n>> get midplane mapping")
 
         # upto limiter
@@ -508,9 +524,9 @@ class TommsInputGenerator:
         self.prof_interp['ne'] = f_ne(psi_target) # m-3
         
         # ensure profiles don't go unphysically negative after extrapolation
-        #self.prof_interp['te'][self.prof_interp['te'] < 0] = 1e-3
-        #self.prof_interp['ti'][self.prof_interp['ti'] < 0] = 1e-3
-        #self.prof_interp['ne'][self.prof_interp['ne'] < 0] = 1e-3
+        self.prof_interp['te'][self.prof_interp['te'] < 0] = 1e-3
+        self.prof_interp['ti'][self.prof_interp['ti'] < 0] = 1e-3
+        self.prof_interp['ne'][self.prof_interp['ne'] < 0] = 1e-3
 
         self.profiles_interpolated = True
 
