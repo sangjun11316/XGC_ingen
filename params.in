@@ -6,6 +6,8 @@ te_file = ./inputs/te_d184833_4800_pfile_new.prf
 ti_file = ./inputs/ti_d184833_4800_pfile_adj_08.prf
 ne_file = ./inputs/ne_d184833_4800_pfile_new.prf
 
+#wall_file = ./inputs/ext_wall_file.prf
+
 # general parameters
 num_mid       = 1000
 dr_scale_psin = 0.0, 0.2, 0.3, 0.6, 0.8, 1.0, 1.05, 1.07, 1.1, 1.2
