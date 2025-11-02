@@ -4,6 +4,7 @@ import numpy as np
 import matplotlib
 matplotlib.use('TkAgg') # to enable interactive backend
 import matplotlib.pyplot as plt
+from matplotlib.widgets import TextBox
 
 from scipy.interpolate import interp1d, interp2d, RectBivariateSpline # RectBivariateSpline is often better than interp2d
 from pathlib import Path
@@ -710,7 +711,6 @@ class TommsInputGenerator:
         plt.tight_layout()
         plt.show()
 
-    # TODO: generate wall file from extenally given information than included in Eqdsk
     def _edit_wall_interactive(self):
         if not self.equilibrium_loaded:
             print(f"{PREFIX_ERRORS}Warning: Load equilibrium first.")
@@ -733,6 +733,9 @@ class TommsInputGenerator:
         # --- Setup Plot ---
         fig, ax = plt.subplots(figsize=(8, 10))
 
+        # space for a textbox to draw a target psin contour
+        fig.subplots_adjust(bottom=0.15)
+
         # Plot psi contour for guidance
         cntr = ax.contour(self.eq.r, self.eq.z, self.eq.psinrz.T, levels=np.linspace(0, 1.2, 101)) # Transpose psinrz
         fig.colorbar(cntr, ax=ax, label='Normalized Poloidal Flux ($\psi_N$)')
@@ -752,6 +755,50 @@ class TommsInputGenerator:
         ax.axis('equal')
         ax.legend()
         ax.grid(True, alpha=0.5)
+
+        # texbox for target psin
+        target_contour_storage = [None]
+
+        def submit_psi_target(text):
+            try:
+                # 1. Get the value from the text box
+                psin_val = float(text)
+            except ValueError:
+                print(f"{PREFIX_ERRORS}Invalid value. Please enter a number (e.g., '1.05').")
+                return
+
+            # 2. Remove the *old* contour set, if one exists
+            if target_contour_storage[0]:
+                for collection in target_contour_storage[0].collections:
+                    collection.remove()
+                target_contour_storage[0] = None
+
+            # 3. Draw the new contour
+            print(f"... Drawing target contour at psi_N = {psin_val}")
+            try:
+                target_cs = ax.contour(
+                    self.eq.r, self.eq.z, self.eq.psinrz.T, 
+                    levels=[psin_val], 
+                    colors=['cyan'],  # Use a bright color
+                    linestyles=['--'],
+                    linewidths=[2.0]
+                )
+                
+                # 4. Store the new contour set
+                target_contour_storage[0] = target_cs
+                fig.canvas.draw_idle() # Redraw the canvas
+            except Exception as e:
+                print(f"{PREFIX_ERRORS}Could not draw contour: {e}")
+
+        # Create the axes for the text box [left, bottom, width, height]
+        ax_box = fig.add_axes([0.3, 0.05, 0.4, 0.05])
+
+        # The 'text_box' variable must be kept in scope, so we assign it.
+        text_box = TextBox(ax_box, 'Target $\psi_N$:', initial='1.0')
+        
+        # Tell the widget to call our function on submit (Enter)
+        text_box.on_submit(submit_psi_target)
+        # --- END OF ADDED BLOCK ---
 
         # --- Interactive ---
         self.wall = {} # Reset selected points for this session
@@ -864,7 +911,7 @@ class TommsInputGenerator:
                 self.wall['r'] = self.eq.rzlim[:,0]
                 self.wall['z'] = self.eq.rzlim[:,1]
                 self.wall_generated = True
-            except Exception as e: # TODO: add functionality for external wall file
+            except Exception as e:
                 print(f"{PREFIX_ERRORS}Error: there is no limiter information in the Eqdsk {e}")
                 self.wall_generated = False
 
