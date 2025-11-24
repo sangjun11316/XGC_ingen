@@ -773,8 +773,16 @@ class TommsInputGenerator:
 
             # 2. Remove the *old* contour set, if one exists
             if target_contour_storage[0]:
-                for collection in target_contour_storage[0].collections:
-                    collection.remove()
+#                for collection in target_contour_storage[0].collections:
+#                    collection.remove()
+#                target_contour_storage[0] = None
+                try:
+                    # New Matplotlib (3.8+) - remove the whole object directly
+                    target_contour_storage[0].remove()
+                except AttributeError:
+                    # Old Matplotlib (Pre-3.8) - remove individual collections
+                    for collection in target_contour_storage[0].collections:
+                        collection.remove()
                 target_contour_storage[0] = None
 
             # 3. Draw the new contour
