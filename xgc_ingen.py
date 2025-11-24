@@ -548,7 +548,7 @@ class TommsInputGenerator:
             ax.plot(self.midplane['psin'], self.prof_interp['ti']/1E3, c='k',  ls='--', label='__interp ti [keV]')
             ax.plot(self.midplane['psin'], self.prof_interp['ne']/1E19, c='k', ls='--', label='__interp ne [1E19]')
 
-        ax.set_xlabel('Normalized Poloidal Flux ($\psi_N$)')
+        ax.set_xlabel(r'Normalized Poloidal Flux ($\psi_N$)')
         ax.set_ylabel('a.u.')
         ax.set_title('Initial Raw Profiles')
         ax.grid(True, alpha=0.5)
@@ -604,17 +604,19 @@ class TommsInputGenerator:
             print(f"{PREFIX_ERRORS}Warning: Resolutions have not been determined yet")
             return
 
-        rmid      = self.midplane['r']
-        psin      = self.midplane['psin']
-        rhoi      = self.resolution['rhoi']
-        dr_target = self.resolution['dr_target']
+        rmid        = self.midplane['r']
+        psin        = self.midplane['psin']
+        rhoi        = self.resolution['rhoi']
+        dr_target   = self.resolution['dr_target']
+        dpol_target = self.resolution['dpol_target']
 
         fig,ax = plt.subplots(figsize=(6,5))
 
         ax.plot(psin, rhoi, c='tab:blue', label='rhoi')
         ax.plot(psin, dr_target, c='tab:orange', label='dr_target')
+        ax.plot(psin, dpol_target, c='tab:green', label='dpol_target')
 
-        ax.set_xlabel('Normalized Poloidal Flux ($\psi_N$)')
+        ax.set_xlabel(r'Normalized Poloidal Flux ($\psi_N$)')
         ax.set_ylabel('Length Scale [m]')
         ax.set_title('Target Resolution vs. Ion Gyroradius')
         ax.legend()
@@ -725,8 +727,8 @@ class TommsInputGenerator:
         print("-------------------------------\n")
 
         # Define a desired resolution.
-        # e.g. 0.5% of the total R-width of the plot
-        f_densify = 0.05
+        # intially 1% of the total R-width of the plot
+        f_densify = 0.01
         max_seg_length = f_densify * (np.max(self.eq.rzlim[:,0]) - np.min(self.eq.rzlim[:,0]))
         original_limiter_r, original_limiter_z = densify_line(self.eq.rzlim[:,0], self.eq.rzlim[:,1] ,max_seg_length)
 
@@ -738,12 +740,12 @@ class TommsInputGenerator:
 
         # Plot psi contour for guidance
         cntr = ax.contour(self.eq.r, self.eq.z, self.eq.psinrz.T, levels=np.linspace(0, 1.2, 101)) # Transpose psinrz
-        fig.colorbar(cntr, ax=ax, label='Normalized Poloidal Flux ($\psi_N$)')
+        fig.colorbar(cntr, ax=ax, label=r'Normalized Poloidal Flux ($\psi_N$)')
         ax.plot(self.eq.rzsep[:, 0], self.eq.rzsep[:, 1], 'tab:orange', linewidth=2, label='Separatrix')
         ax.plot(self.eq.rmag, self.eq.zmag, 'kx', markersize=10, mew=2, label='Magnetic Axis')
 
         # Plot original limiter - store handle for hover effects if desired later
-        ax.scatter(original_limiter_r, original_limiter_z, c='gray', label=f'densified ({f_densify*100:.1f}%)', s=8)
+        densified_scatter = ax.scatter(original_limiter_r, original_limiter_z, c='gray', label=f'densified ({f_densify*100:.1f}%)', s=8)
         ax.plot(self.eq.rzlim[:,0], self.eq.rzlim[:,1], 'k.-', label='Original Limiter', markersize=4)
 
         # Plot currently selected points (initially empty) - store line handle
@@ -756,7 +758,9 @@ class TommsInputGenerator:
         ax.legend()
         ax.grid(True, alpha=0.5)
 
-        # texbox for target psin
+        # --- Interactive ---
+        self.wall              = {} # Reset selected points for this session
+        selected_indices       = set() # Keep track of indices added
         target_contour_storage = [None]
 
         def submit_psi_target(text):
@@ -790,19 +794,50 @@ class TommsInputGenerator:
             except Exception as e:
                 print(f"{PREFIX_ERRORS}Could not draw contour: {e}")
 
-        # Create the axes for the text box [left, bottom, width, height]
-        ax_box = fig.add_axes([0.3, 0.05, 0.4, 0.05])
+        def submit_f_densify(text):
+            # Use 'nonlocal' to modify the variables from the outer scope
+            nonlocal f_densify, original_limiter_r, original_limiter_z
+            
+            try:
+                new_val = float(text)
+                if not (0 < new_val <= 1.0):
+                    raise ValueError("must be > 0 and <= 1.0")
+            except Exception as e:
+                print(f"{PREFIX_ERRORS}Invalid f_densify value: {e}")
+                return
 
-        # The 'text_box' variable must be kept in scope, so we assign it.
-        text_box = TextBox(ax_box, 'Target $\psi_N$:', initial='1.0')
-        
-        # Tell the widget to call our function on submit (Enter)
-        text_box.on_submit(submit_psi_target)
-        # --- END OF ADDED BLOCK ---
+            f_densify = new_val
+            print(f"... Re-densifying wall with f_densify = {f_densify}")
 
-        # --- Interactive ---
-        self.wall = {} # Reset selected points for this session
-        selected_indices = set() # Keep track of indices added
+            # 1. Recalculate the densified line
+            max_seg_length = f_densify * (np.max(self.eq.rzlim[:,0]) - np.min(self.eq.rzlim[:,0]))
+            original_limiter_r, original_limiter_z = densify_line(self.eq.rzlim[:,0], self.eq.rzlim[:,1] ,max_seg_length)
+
+            # 2. Update the scatter plot data
+            new_offsets = np.column_stack((original_limiter_r, original_limiter_z))
+            densified_scatter.set_offsets(new_offsets)
+            
+            # 3. Update the label and redraw the legend
+            densified_scatter.set_label(f'densified ({f_densify*100:.1f}%)')
+            ax.legend()
+            
+            # 4. CRITICAL: Reset the user's selection
+            selected_indices.clear()
+            self.wall.clear()
+            selected_line.set_data([], [])
+            print("... Selection has been reset due to re-densification.")
+
+            # 5. Redraw the canvas
+            fig.canvas.draw_idle()
+
+        # Create the axes for the textboxes [left, bottom, width, height]
+        ax_box_densify = fig.add_axes([0.15, 0.05, 0.3, 0.05])
+        text_box_densify = TextBox(ax_box_densify, 'Densify (0-1):', initial=str(f_densify))
+        text_box_densify.on_submit(submit_f_densify)
+
+        ax_box_psi = fig.add_axes([0.6, 0.05, 0.3, 0.05]) #([0.3, 0.05, 0.4, 0.05])
+        text_box_psi = TextBox(ax_box_psi, 'Target $\psi_N$:', initial='1.05')
+        text_box_psi.on_submit(submit_psi_target)
 
         def onclick(event):
             if event.inaxes != ax: return # Ignore clicks outside the plot area
@@ -819,9 +854,8 @@ class TommsInputGenerator:
             min_dist = distances[idx_min]
 
             # Define a tolerance margin (adjust as needed, depends on plot scale)
-            # Example: 0.5% of the plot's R-range
             r_range = ax.get_xlim()[1] - ax.get_xlim()[0]
-            margin = 0.05 * r_range # 1% margin
+            margin = 0.05 * r_range # 5% margin
 
             if min_dist < margin:
                 # add clicked points
@@ -880,7 +914,7 @@ class TommsInputGenerator:
             fig_final, ax_final = plt.subplots(figsize=(8, 10))
 
             cntr = ax_final.contour(self.eq.r, self.eq.z, self.eq.psinrz.T, levels=np.linspace(0, 1.2, 61)) # Transpose psinrz
-            fig.colorbar(cntr, ax=ax_final, label='Normalized Poloidal Flux ($\psi_N$)')
+            fig.colorbar(cntr, ax=ax_final, label=r'Normalized Poloidal Flux ($\psi_N$)')
             ax_final.plot(self.eq.rzsep[:, 0], self.eq.rzsep[:, 1], 'tab:orange', linewidth=2, label='Separatrix')
             ax_final.plot(self.eq.rmag, self.eq.zmag, 'kx', markersize=10, mew=2, label='Magnetic Axis')
 
