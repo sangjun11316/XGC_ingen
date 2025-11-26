@@ -219,7 +219,7 @@ class Eqdsk:
 
         fig,ax = plt.subplots(figsize=(8, 10))
         cntr = ax.contour(self.r, self.z, self.psinrz.T, levels=np.linspace(0, 1.2, 101)) # Transpose psinrz
-        fig.colorbar(cntr, ax=ax, label='Normalized Poloidal Flux ($\psi_N$)')
+        fig.colorbar(cntr, ax=ax, label=r'Normalized Poloidal Flux ($\psi_N$)')
         ax.plot(self.rzsep[:, 0], self.rzsep[:, 1], 'tab:orange', linewidth=2, label='Separatrix')
         ax.plot(self.rzlim[:, 0], self.rzlim[:, 1], 'k', linewidth=2, label='Limiter')
         ax.plot(self.rmag, self.zmag, 'kx', markersize=10, mew=2, label='Magnetic Axis')
@@ -844,7 +844,7 @@ class TommsInputGenerator:
         text_box_densify.on_submit(submit_f_densify)
 
         ax_box_psi = fig.add_axes([0.6, 0.05, 0.3, 0.05]) #([0.3, 0.05, 0.4, 0.05])
-        text_box_psi = TextBox(ax_box_psi, 'Target $\psi_N$:', initial='1.05')
+        text_box_psi = TextBox(ax_box_psi, r'Target $\psi_N$:', initial='1.05')
         text_box_psi.on_submit(submit_psi_target)
 
         def onclick(event):
