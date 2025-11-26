@@ -87,7 +87,7 @@ def compare_eqdsks(file1, file2):
         overlay_levels = []
         overlay_levels = [eq1.smag + val * (eq1.sbdy - eq1.smag) for val in PSIN_COMPARE]
 
-        level_labels = f"$\psi_N$: [{', '.join(map(str, PSIN_COMPARE))}] of F1"
+        level_labels = f"$\\psi_N$: [{', '.join(map(str, PSIN_COMPARE))}] of F1"
 
         # File 1 = Blue dashed
         ax.contour(eq1.r, eq1.z, eq1.psirz.T, levels=overlay_levels, colors='blue', linestyles='-')
@@ -119,7 +119,7 @@ def compare_eqdsks(file1, file2):
         print(f"{'Psi_axis [Wb]':<15} | {sm1:<12.3f} | {sm2:<12.3f} | {sm1-sm2:<12.3f}")
         print(f"{'Psi_bdy [Wb]':<15} | {sb1:<12.3f} | {sb2:<12.3f} | {sb1-sb2:<12.3f}")
 
-    ax.set_title(f'Overlay Comparison (Raw $\psi$)\n(Blue=File1, Red=File2)\n{level_labels}')
+    ax.set_title(f'Overlay Comparison (Raw $\\psi$)\n(Blue=File1, Red=File2)\n{level_labels}')
     ax.set_xlabel('R [m]')
     ax.axis('equal')
     ax.grid(True, alpha=0.3)
@@ -187,7 +187,7 @@ def compare_eqdsks_psin(file1, file2):
     if hasattr(eq1, 'psinrz') and hasattr(eq2, 'psinrz'):
         # Contour lines only (no fill) for overlay
         overlay_levels = PSIN_COMPARE
-        level_labels = f"$\psi_N$: [{', '.join(map(str, PSIN_COMPARE))}]"
+        level_labels = f"$\\psi_N$: [{', '.join(map(str, PSIN_COMPARE))}]"
 
         # File 1 = Blue dashed
         ax.contour(eq1.r, eq1.z, eq1.psinrz.T, levels=overlay_levels, colors='blue', linestyles='-')
