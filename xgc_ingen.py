@@ -578,7 +578,7 @@ class TommsInputGenerator:
         mi = 2*PROTON_MASS
 
         Bmid = np.abs(self.eq.bmag) * self.eq.rmag / rmid
-        rhoi = np.sqrt(mi*ti_ev*UNIT_CHARGE)/(UNIT_CHARGE*Bmid) # TODO: check formula
+        rhoi = np.sqrt(mi*ti_ev*UNIT_CHARGE)/(UNIT_CHARGE*Bmid) 
 
         # scale factors
         val_first = self.params['dr_scale_fac'][0]
