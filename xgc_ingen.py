@@ -11,9 +11,10 @@ from pathlib import Path
 
 import configparser
 
-PROTON_MASS   = 1.6720e-27  # kg
-ELECTRON_MASS = 9.1094e-31  # kg
-UNIT_CHARGE   = 1.6022e-19  # C
+PROTON_MASS   = 1.6720e-27   # kg
+ELECTRON_MASS = 9.1094e-31   # kg
+UNIT_CHARGE   = 1.6022e-19   # C
+MU0           = 4e-7 * np.pi # H/m
 
 PREFIX_ERRORS = ' * '
 
@@ -199,7 +200,7 @@ class Eqdsk:
         buffer += '{:16s} {:7.3f} [MA]\n'.format('Plasma current',self.ip/1.E6)
         buffer += '{:16s} {:7.3f} [m] \n'.format('Magnetic axis R',self.rmag)
         buffer += '{:16s} {:7.3f} [m] \n'.format('Magnetic axis Z',self.zmag)
-        buffer += '{:16s} {:7.3f} [T] \n'.format('Toroidal field',self.fpol[0]/self.rmag)
+        buffer += '{:16s} {:7.3f} [T] \n'.format('Toroidal field',self.bmag)
         buffer += '{:16s} {:7.3f} [Wb] \n'.format('Poloidal flux',self.sbdy - self.smag)
         buffer += '{:16s} {:7.3f} [Wb] \n'.format('psi center',self.smag)
 
@@ -504,7 +505,7 @@ class TommsInputGenerator:
             print(f"{PREFIX_ERRORS}Warning: Midplane mapping and raw profiles must be loaded first.")
             return
 
-        psi_target = self.midplane['psin']
+        psin_target = self.midplane['psin']
 
         # interp1d
         val_first = self.prof['te'][0]
@@ -519,14 +520,20 @@ class TommsInputGenerator:
         val_last = self.prof['ne'][-1]
         f_ne = interp1d(self.prof['psi_ne'], self.prof['ne'], kind='linear', bounds_error=False, fill_value=(val_first, val_last))
 
-        self.prof_interp['te'] = f_te(psi_target) # eV
-        self.prof_interp['ti'] = f_ti(psi_target) # eV
-        self.prof_interp['ne'] = f_ne(psi_target) # m-3
+        self.prof_interp['te'] = f_te(psin_target) # eV
+        self.prof_interp['ti'] = f_ti(psin_target) # eV
+        self.prof_interp['ne'] = f_ne(psin_target) # m-3
         
         # ensure profiles don't go unphysically negative after extrapolation
-        self.prof_interp['te'][self.prof_interp['te'] < 0] = 1e-3
-        self.prof_interp['ti'][self.prof_interp['ti'] < 0] = 1e-3
-        self.prof_interp['ne'][self.prof_interp['ne'] < 0] = 1e-3
+        self.prof_interp['te'][self.prof_interp['te'] <= 0] = 1e-3
+        self.prof_interp['ti'][self.prof_interp['ti'] <= 0] = 1e-3
+        self.prof_interp['ne'][self.prof_interp['ne'] <= 0] = 1e-3
+
+        # interpolate safety factor (to be used for inspecting profiles)
+        val_first = self.eq.q[0]
+        val_last = self.eq.q[-1]
+        f_q = interp1d(self.eq.psin, self.eq.q, kind='linear', bounds_error=False, fill_value=(val_first, val_last))
+        self.prof_interp['q'] = f_q(psin_target)
 
         self.profiles_interpolated = True
 
@@ -557,13 +564,8 @@ class TommsInputGenerator:
         plt.show()
 
     def _inspect_profiles(self):
-        print("\n>> inspect resolution")
-        if not self.profiles_interpolated:
-            print(f"{PREFIX_ERRORS}Warning: Interpolated profiles needed")
-            return
-
-    def _determine_resolutions(self):
-        print("\n>> determine resolution")
+        print("\n>> inspect profiles")
+        print("   - Note that rhoi is calculated here")
         if not self.profiles_interpolated:
             print(f"{PREFIX_ERRORS}Warning: Interpolated profiles needed")
             return
@@ -578,11 +580,87 @@ class TommsInputGenerator:
         pe = UNIT_CHARGE*ne*te_ev
         ptot = pi + pe
 
-        # deuterium
+        q = self.prof_interp['q']
+
+        # calculate gyro radius (deuterium)
         mi = 2*PROTON_MASS
 
         Bmid = np.abs(self.eq.bmag) * self.eq.rmag / rmid
         rhoi = np.sqrt(mi*ti_ev*UNIT_CHARGE)/(UNIT_CHARGE*Bmid) 
+
+        self.resolution['rhoi'] = rhoi
+
+        # Alfven timescale
+        tau_Alfven = self.eq.rmag * np.sqrt(MU0 * ne * mi) / np.abs(self.eq.bmag) # s
+
+        # Collision timescale (e << i)
+        lnA = 15 # coulomb logarithm (typically between 10-20)
+        tau_col_e = te_ev**1.5 / (2.91e-12 * lnA * ne) # s
+
+        # XGC main ion toroiddal transit time (default is for 0.2 keV)
+        main_ion_characteristic_energy_keV = 0.2 # keV
+        tau_transit = 2*np.pi * self.eq.rmag / np.sqrt(2*main_ion_characteristic_energy_keV*1e3*UNIT_CHARGE / mi)
+
+        # Ti length scale
+        dti_dr = np.zeros_like(ti_ev)
+        dti_dr[1:-1] = (ti_ev[2:] - ti_ev[:-2]) / (rmid[2:] - rmid[:-2])
+        dti_dr[0]  = (ti_ev[1] - ti_ev[0]) / (rmid[1] - rmid[0])
+        dti_dr[-1] = (ti_ev[-1] - ti_ev[-2]) / (rmid[-1] - rmid[-2])
+        dti_dr[dti_dr == 0] = 1e-14
+
+        L_ti = ti_ev / (np.abs(dti_dr)) # m
+
+        # Banana orbit width
+        eps = (rmid - self.eq.rmag) / self.eq.rmag  # inverse aspect ratio
+
+        w_banana = np.zeros_like(eps) # m
+        w_banana[1:] = q[1:]*rhoi[1:]/np.sqrt(eps[1:])
+
+        # Plot
+        fig, axes = plt.subplots(1, 2, figsize=(14, 6))
+        fig.suptitle(f"Physics Scales Overview ({self.eq.header})", fontsize=14)
+
+        # --- Plot 1: Spatial Scales ---
+        ax = axes[0]
+        ax.plot(psin, L_ti,       label=r'$L_{T_i}$', linewidth=2, color='tab:blue')
+        ax.plot(psin, w_banana,   label=r'$w_{banana}$', linewidth=2, color='tab:orange')
+        ax.plot(psin, 2*w_banana, label=r'$w_{banana} x 2$', linewidth=2, ls='--', color='tab:orange')
+        
+        # Formatting
+        ax.set_title("Spatial Scales")
+        ax.set_xlabel(r'$\psi_N$')
+        ax.set_ylabel('Length [m]')
+        ax.set_yscale('log')
+        ax.grid(True, which="both", ls="-", alpha=0.4)
+        ax.legend(loc='best')
+
+        # --- Plot 2: Time Scales ---
+        ax = axes[1]
+        ax.plot(psin, tau_Alfven, label=r'$\tau_{A}$', linewidth=2, color='tab:green')
+        ax.plot(psin, tau_col_e,  label=r'$\tau^{col}_{e}$', linewidth=2, color='tab:red')
+        ax.axhline(y=tau_transit, label=r'$\tau_{transit}$', c='gray', ls='--', lw=2)
+        ax.axhline(y=tau_transit*1e-4, label=r'$\tau_{transit} x 1e-4$', c='gray', ls='-.', lw=2)
+        ax.axhline(y=tau_transit*1e-5, label=r'$\tau_{transit} x 1e-5$', c='gray', ls=':', lw=2)
+
+        # Formatting
+        ax.set_title("Time Scales")
+        ax.set_xlabel(r'$\psi_N$')
+        ax.set_ylabel('Time [s]')
+        ax.set_yscale('log') # Essential as these differ by orders of magnitude
+        ax.grid(True, which="both", ls="-", alpha=0.4)
+        ax.legend(loc='best')
+
+        plt.tight_layout()
+        plt.show()
+
+    def _determine_resolutions(self):
+        print("\n>> determine resolution")
+        if not self.profiles_interpolated:
+            print(f"{PREFIX_ERRORS}Warning: Interpolated profiles needed")
+            return
+
+        psin  = self.midplane['psin']
+        rhoi = self.resolution['rhoi']
 
         # scale factors
         val_first = self.params['dr_scale_fac'][0]
@@ -597,7 +675,6 @@ class TommsInputGenerator:
         # poloidal resolution
         dpol_target = dr_target * self.params['pol_scale_fac']
 
-        self.resolution['rhoi'] = rhoi
         self.resolution['dr_target']   = dr_target
         self.resolution['dpol_target'] = dpol_target
 
@@ -1016,6 +1093,7 @@ class TommsInputGenerator:
             self._interpolate_profiles() 
             self.plot_profiles()
 
+            self._inspect_profiles()
             self._determine_resolutions()
             self.plot_resolutions()
 
