@@ -4,9 +4,7 @@ import sys
 import os
 
 # --- Import from parent directory ---
-# This one-liner adds '../' to the system path so we can import xgc_ingen
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
-
 try:
     from xgc_ingen import Eqdsk
 except ImportError as e:

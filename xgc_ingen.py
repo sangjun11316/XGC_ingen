@@ -19,6 +19,40 @@ MU0           = 4e-7 * np.pi # H/m
 PREFIX_ERRORS = ' * '
 
 # some general helper functions (TODO: make a separate module)
+def read_prf(filename, prefix=''):
+    print(f"...reading {prefix}: {filename}")
+    with open(filename, 'r') as file:
+        [n] = map(int, file.readline().strip().split())
+
+        psi=np.zeros(n)
+        var=np.zeros(n)
+
+        lines_read = 0
+        for l in range(n):
+            line = file.readline()
+            if not line: # Check for unexpected end of file
+                raise EOFError(f"{PREFIX_ERRORS}Expected {n} data lines, but file ended after {lines_read} lines.")
+            try:
+                psi[l], var[l] = map(float, line.strip().split())
+                lines_read += 1
+            except ValueError:
+                raise ValueError(f"{PREFIX_ERRORS}Could not parse line {l+2} as two floats: '{line.strip()}'")
+
+        # --- Optionally check end flag ---
+        end_flag_line = file.readline()
+        if end_flag_line: # Check if a line was actually read
+            try:
+                end_flag = int(end_flag_line.strip().split()[0])
+                if end_flag != -1:
+                    print(f"{PREFIX_ERRORS}Warning: Expected end flag -1 in {filename}, but found {end_flag}.\n...Proceeding anyway.")
+            except (ValueError, IndexError):
+                print(f"{PREFIX_ERRORS}Warning: Could not parse end flag line in {filename}: '{end_flag_line.strip()}'.\n...Proceeding anyway.")
+        else:
+            # No end flag line found, which is okay based on your requirement
+            print(f"{PREFIX_ERRORS}Warning: No end flag line found in {filename} after reading {n} data points.\n...Proceeding anyway.")
+
+        return psi, var
+
 def is_monotonic(arr):
   diffs = np.diff(arr)
   return np.all(diffs >= 0) or np.all(diffs <= 0)
@@ -413,7 +447,7 @@ class TommsInputGenerator:
             if self.params['wall_file']:
                 print(f"{PREFIX_ERRORS}Warning: Reading external wall file {self.params['wall_file']}")
                 try:
-                    self.eq.rzlim = np.stack(self._read_prf(self.params['wall_file'], 'wall'), axis=1)
+                    self.eq.rzlim = np.stack(read_prf(self.params['wall_file'], 'wall'), axis=1)
                 except ValueError:
                     raise ValueError(f"...failed to read wall file {self.params['wall_file']}")
 
@@ -446,40 +480,6 @@ class TommsInputGenerator:
 
         self.midplane_setted = True
 
-    def _read_prf(self, filename, prefix=''):
-        print(f"...reading {prefix}: {filename}")
-        with open(filename, 'r') as file:
-            [n] = map(int, file.readline().strip().split())
-
-            psi=np.zeros(n)
-            var=np.zeros(n)
-
-            lines_read = 0
-            for l in range(n):
-                line = file.readline()
-                if not line: # Check for unexpected end of file
-                    raise EOFError(f"{PREFIX_ERRORS}Expected {n} data lines, but file ended after {lines_read} lines.")
-                try:
-                    psi[l], var[l] = map(float, line.strip().split())
-                    lines_read += 1
-                except ValueError:
-                    raise ValueError(f"{PREFIX_ERRORS}Could not parse line {l+2} as two floats: '{line.strip()}'")
-
-            # --- Optionally check end flag ---
-            end_flag_line = file.readline()
-            if end_flag_line: # Check if a line was actually read
-                try:
-                    end_flag = int(end_flag_line.strip().split()[0])
-                    if end_flag != -1:
-                        print(f"{PREFIX_ERRORS}Warning: Expected end flag -1 in {filename}, but found {end_flag}.\n...Proceeding anyway.")
-                except (ValueError, IndexError):
-                    print(f"{PREFIX_ERRORS}Warning: Could not parse end flag line in {filename}: '{end_flag_line.strip()}'.\n...Proceeding anyway.")
-            else:
-                # No end flag line found, which is okay based on your requirement
-                print(f"{PREFIX_ERRORS}Warning: No end flag line found in {filename} after reading {n} data points.\n...Proceeding anyway.")
-
-            return psi, var
-
     def _read_profiles(self):
         print("\n>> read input profiles")
         if not self.equilibrium_loaded:
@@ -488,9 +488,9 @@ class TommsInputGenerator:
         try:
             print("\n>> load te, ti, ne profiles")
 
-            psi_te, te = self._read_prf(self.params['te_file'], 'Te')
-            psi_ti, ti = self._read_prf(self.params['ti_file'], 'Ti')
-            psi_ne, ne = self._read_prf(self.params['ne_file'], 'ne')
+            psi_te, te = read_prf(self.params['te_file'], 'Te')
+            psi_ti, ti = read_prf(self.params['ti_file'], 'Ti')
+            psi_ne, ne = read_prf(self.params['ne_file'], 'ne')
             self.prof = {'psi_te': psi_te, 'te': te,
                          'psi_ti': psi_ti, 'ti': ti,
                          'psi_ne': psi_ne, 'ne': ne}
