@@ -293,11 +293,11 @@ class TommsInputGenerator:
         return params
 
     def _load_parameters(self, filepath='./params.in'):
+        print(f"\n>> loading parameters from {filepath}")
         if not os.path.exists(filepath):
             print(f"{PREFIX_ERRORS}Warning: Config file '{filepath}' not found. Using defaults.")
             return
 
-        print(f"\n>> loading parameters from {filepath}")
         config = configparser.ConfigParser()
         try:
             config.read(filepath)
@@ -401,6 +401,7 @@ class TommsInputGenerator:
         self.eq.plot_overview()
 
     def _get_midplane_mapping(self):
+        print("\n>> get midplane mapping")
         if not self.equilibrium_loaded:
             print(f"{PREFIX_ERRORS}Warning: Load equilibrium first.")
             return
@@ -417,8 +418,6 @@ class TommsInputGenerator:
 
             else:
                 raise ValueError(f"{PREFIX_ERRORS}Error: no wall information neither from EQDSK nor externally given")
-
-        print("\n>> get midplane mapping")
 
         # upto limiter
         rmid = np.linspace(self.eq.rmag, np.amax(self.eq.rzlim[:,0]), self.params['num_mid'])
@@ -481,6 +480,7 @@ class TommsInputGenerator:
             return psi, var
 
     def _read_profiles(self):
+        print("\n>> read input profiles")
         if not self.equilibrium_loaded:
             print(f"{PREFIX_ERRORS}Warning: Load equilibrium first.")
             return
@@ -499,11 +499,10 @@ class TommsInputGenerator:
             self.profiles_loaded = False        
 
     def _interpolate_profiles(self):
+        print("\n>> interpolate profiles onto midplane grid")
         if not self.midplane_setted or not self.profiles_loaded:
             print(f"{PREFIX_ERRORS}Warning: Midplane mapping and raw profiles must be loaded first.")
             return
-
-        print("\n>> interpolate profiles onto midplane grid")
 
         psi_target = self.midplane['psin']
 
@@ -557,12 +556,17 @@ class TommsInputGenerator:
         plt.tight_layout()
         plt.show()
 
-    def _determine_resolutions(self):
+    def _inspect_profiles(self):
+        print("\n>> inspect resolution")
         if not self.profiles_interpolated:
             print(f"{PREFIX_ERRORS}Warning: Interpolated profiles needed")
             return
 
+    def _determine_resolutions(self):
         print("\n>> determine resolution")
+        if not self.profiles_interpolated:
+            print(f"{PREFIX_ERRORS}Warning: Interpolated profiles needed")
+            return
 
         rmid  = self.midplane['r']
         psin  = self.midplane['psin']
@@ -626,11 +630,10 @@ class TommsInputGenerator:
         plt.show()
 
     def _generate_surfaces(self):
+        print("\n>> generate surfaces")
         if not self.resolution_determined:
             print(f"{PREFIX_ERRORS}Warning: Resolution have not been determined yet")
             return
-
-        print("\n>> generate surfaces")
 
         rmid        = self.midplane['r']
         psin        = self.midplane['psin']
@@ -714,11 +717,11 @@ class TommsInputGenerator:
         plt.show()
 
     def _edit_wall_interactive(self):
+        print("\n>> edit wall")
         if not self.equilibrium_loaded:
             print(f"{PREFIX_ERRORS}Warning: Load equilibrium first.")
             return
 
-        print("\n>> edit wall")
         print("--- Interactive Wall Editor ---")
         print(" - Click near a point on the 'Original Limiter' (black line) to add/remove it.")
         print(" - Added points form the 'Simplified Wall' (red line).")
@@ -940,6 +943,7 @@ class TommsInputGenerator:
             print("\nFinished selection. No points selected for simplified wall.")
 
     def _write_tomms_input(self):
+        print("\n>> write TOMMS input")
         if not self.surface_generated:
             print(f"{PREFIX_ERRORS}Warning: Surfaces have not been determined yet")
             return
@@ -953,8 +957,6 @@ class TommsInputGenerator:
             except Exception as e:
                 print(f"{PREFIX_ERRORS}Error: there is no limiter information in the Eqdsk {e}")
                 self.wall_generated = False
-
-        print("\n>> write TOMMS input")
 
         rsurf         = self.surface['r']
         nsurf         = len(rsurf)
