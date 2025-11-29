@@ -453,6 +453,13 @@ class TommsInputGenerator:
 
             else:
                 raise ValueError(f"{PREFIX_ERRORS}Error: no wall information neither from EQDSK nor externally given")
+        else:
+            if self.params['wall_file']:
+                print(f"{PREFIX_ERRORS}Warning: Eqdsk's rzlim is replaced by external wall file {self.params['wall_file']}")
+                try:
+                    self.eq.rzlim = np.stack(read_prf(self.params['wall_file'], 'wall'), axis=1)
+                except ValueError:
+                    raise ValueError(f"...failed to read wall file {self.params['wall_file']}")
 
         # upto limiter
         rmid = np.linspace(self.eq.rmag, np.amax(self.eq.rzlim[:,0]), self.params['num_mid'])
@@ -614,7 +621,7 @@ class TommsInputGenerator:
         eps = (rmid - self.eq.rmag) / self.eq.rmag  # inverse aspect ratio
 
         w_banana = np.zeros_like(eps) # m
-        w_banana[1:] = q[1:]*rhoi[1:]/np.sqrt(eps[1:])
+        w_banana[1:] = q[1:]*rhoi[1:]/np.sqrt(eps[1:]) # 0th element is skipped to avoid division by zero
 
         # Plot
         fig, axes = plt.subplots(1, 2, figsize=(14, 6))
@@ -626,7 +633,6 @@ class TommsInputGenerator:
         ax.plot(psin, w_banana,   label=r'$w_{banana}$', linewidth=2, color='tab:orange')
         ax.plot(psin, 2*w_banana, label=r'$w_{banana} x 2$', linewidth=2, ls='--', color='tab:orange')
         
-        # Formatting
         ax.set_title("Spatial Scales")
         ax.set_xlabel(r'$\psi_N$')
         ax.set_ylabel('Length [m]')
@@ -642,7 +648,6 @@ class TommsInputGenerator:
         ax.axhline(y=tau_transit*1e-4, label=r'$\tau_{transit} x 1e-4$', c='gray', ls='-.', lw=2)
         ax.axhline(y=tau_transit*1e-5, label=r'$\tau_{transit} x 1e-5$', c='gray', ls=':', lw=2)
 
-        # Formatting
         ax.set_title("Time Scales")
         ax.set_xlabel(r'$\psi_N$')
         ax.set_ylabel('Time [s]')
