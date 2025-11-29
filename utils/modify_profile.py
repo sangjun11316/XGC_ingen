@@ -160,8 +160,10 @@ if __name__ == "__main__":
     
     # --- Apply Logic ---
     # 1. Extrapolate SOL (applies to Ne, Te, Ti)
+    psi_sep = 0.985
+    psi_max = 1.3
     target_floor = 10.0
-    mod.extrapolate_sol(psi_sep=1.0, psi_max=1.3, target_floor=target_floor)
+    mod.extrapolate_sol(psi_sep=psi_sep, psi_max=psi_max, target_floor=target_floor)
     
     # 2. Apply Ti Clamp (Heuristic: if filename contains 't' or 'T')
     if 't' in os.path.basename(prf_file).lower():
