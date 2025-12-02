@@ -87,8 +87,8 @@ def write_output(filename, psi, val):
 
 if __name__ == "__main__":
     if len(sys.argv) < 3:
-        print("Usage: python convert_prad_to_power.py <prad_file> <g_file>")
-        print("Example: python convert_prad_to_power.py inputs/prad.prf inputs/g12345.00000")
+        print("Usage: python convert_prad_to_power.py <g_file> <prad_file> ")
+        print("Example: python convert_prad_to_power.py inputs/g12345.00000 inputs/prad.prf")
         sys.exit(1)
 
     file_g    = sys.argv[1]
