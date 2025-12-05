@@ -22,8 +22,9 @@ def plot_profiles(filenames):
     fig, ax = plt.subplots(figsize=(8, 6))
     
     # Cycle through colors/markers if you have many files
-    colors = plt.cm.viridis(np.linspace(0, 0.9, len(filenames)))
-    markers = ['o', 'x', 's', '^', 'v', 'D']
+    colors     = ['tab:blue', 'r', 'b']
+    markers    = ['o', 'x', 's']
+    linestyles = ['-', '-', '']
 
     for i, fname in enumerate(filenames):
         if not os.path.exists(fname):
@@ -37,12 +38,13 @@ def plot_profiles(filenames):
             # Label with the filename (basename only)
             label_str = os.path.basename(fname)
             
-            marker = markers[i % len(markers)]
-            color = colors[i]
+            marker    = markers[i]
+            color     = colors[i]
+            linestyle = linestyles[i]
             
             # Plot
             ax.plot(psi, val, label=label_str, color=color, marker=marker, 
-                    markersize=4, linestyle='-', alpha=0.8)
+                    markersize=4, linestyle=linestyle, alpha=0.8)
             
         except Exception as e:
             print(f"Error reading {fname}: {e}")
