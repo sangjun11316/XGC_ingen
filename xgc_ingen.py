@@ -1039,10 +1039,10 @@ class TommsInputGenerator:
             return
 
         if not self.wall_generated:
-            print(f"{PREFIX_ERRORS}Warning: no simplified wall curve has been generated. Using rzlim in Eqdsk.")
+            print(f"{PREFIX_ERRORS}Warning: no simplified wall curve has been generated. Using original wall.")
             try:
-                self.wall['r'] = self.eq.rzlim[:,0]
-                self.wall['z'] = self.eq.rzlim[:,1]
+                self.wall['r'] = self.wall_org['r']
+                self.wall['z'] = self.wall_org['z']
                 self.wall_generated = True
             except Exception as e:
                 print(f"{PREFIX_ERRORS}Error: there is no limiter information in the Eqdsk {e}")
