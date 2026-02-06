@@ -284,6 +284,7 @@ class TommsInputGenerator:
         self.resolution  = {}
         self.surface     = {}
         self.wall        = {}
+        self.wall_org    = {}
 
         # flags to track progress
         self.equilibrium_loaded    = False
@@ -447,7 +448,8 @@ class TommsInputGenerator:
             if self.params['wall_file']:
                 print(f"{PREFIX_ERRORS}Warning: Reading external wall file {self.params['wall_file']}")
                 try:
-                    self.eq.rzlim = np.stack(read_prf(self.params['wall_file'], 'wall'), axis=1)
+                    self.wall_org['r'] = np.stack(read_prf(self.params['wall_file'], 'wall'), axis=1)[:,0]
+                    self.wall_org['z'] = np.stack(read_prf(self.params['wall_file'], 'wall'), axis=1)[:,1]
                 except ValueError:
                     raise ValueError(f"...failed to read wall file {self.params['wall_file']}")
 
@@ -457,12 +459,17 @@ class TommsInputGenerator:
             if self.params['wall_file']:
                 print(f"{PREFIX_ERRORS}Warning: Eqdsk's rzlim is replaced by external wall file {self.params['wall_file']}")
                 try:
-                    self.eq.rzlim = np.stack(read_prf(self.params['wall_file'], 'wall'), axis=1)
+                    self.wall_org['r'] = np.stack(read_prf(self.params['wall_file'], 'wall'), axis=1)[:,0]
+                    self.wall_org['z'] = np.stack(read_prf(self.params['wall_file'], 'wall'), axis=1)[:,1]
                 except ValueError:
                     raise ValueError(f"...failed to read wall file {self.params['wall_file']}")
 
+            else:
+                self.wall_org['r'] = self.eq.rzlim[:,0]
+                self.wall_org['z'] = self.eq.rzlim[:,1]
+
         # upto limiter
-        rmid = np.linspace(self.eq.rmag, np.amax(self.eq.rzlim[:,0]), self.params['num_mid'])
+        rmid = np.linspace(self.eq.rmag, np.amax(self.wall_org['r']), self.params['num_mid'])
         zmid = np.full_like(rmid, self.eq.zmag)
 
         '''
@@ -814,8 +821,8 @@ class TommsInputGenerator:
         # Define a desired resolution.
         # intially 1% of the total R-width of the plot
         f_densify = 0.01
-        max_seg_length = f_densify * (np.max(self.eq.rzlim[:,0]) - np.min(self.eq.rzlim[:,0]))
-        original_limiter_r, original_limiter_z = densify_line(self.eq.rzlim[:,0], self.eq.rzlim[:,1] ,max_seg_length)
+        max_seg_length = f_densify * (np.max(self.wall_org['r']) - np.min(self.wall_org['r']))
+        original_limiter_r, original_limiter_z = densify_line(self.wall_org['r'], self.wall_org['z'] ,max_seg_length)
 
         # --- Setup Plot ---
         fig, ax = plt.subplots(figsize=(8, 10))
@@ -831,10 +838,11 @@ class TommsInputGenerator:
 
         # Plot original limiter - store handle for hover effects if desired later
         densified_scatter = ax.scatter(original_limiter_r, original_limiter_z, c='gray', label=f'densified ({f_densify*100:.1f}%)', s=8)
-        ax.plot(self.eq.rzlim[:,0], self.eq.rzlim[:,1], 'k.-', label='Original Limiter', markersize=4)
+        ax.plot(self.eq.rzlim[:,0], self.eq.rzlim[:,1], '.-', color='gray', label='Eqdsk Limiter', markersize=4)
+        ax.plot(self.wall_org['r'], self.wall_org['z'], 'k.-', label='Prev wall', markersize=4)
 
         # Plot currently selected points (initially empty) - store line handle
-        selected_line, = ax.plot([], [], 'ro-', label='Simplified Wall (Click to add)', markersize=6)
+        selected_line, = ax.plot([], [], 'ro-', label='New Wall (Click to add)', markersize=6)
 
         ax.set_xlabel('R [m]')
         ax.set_ylabel('Z [m]')
@@ -900,8 +908,8 @@ class TommsInputGenerator:
             print(f"... Re-densifying wall with f_densify = {f_densify}")
 
             # 1. Recalculate the densified line
-            max_seg_length = f_densify * (np.max(self.eq.rzlim[:,0]) - np.min(self.eq.rzlim[:,0]))
-            original_limiter_r, original_limiter_z = densify_line(self.eq.rzlim[:,0], self.eq.rzlim[:,1] ,max_seg_length)
+            max_seg_length = f_densify * (np.max(self.wall_org['r']) - np.min(self.wall_org['r']))
+            original_limiter_r, original_limiter_z = densify_line(self.wall_org['r'], self.wall_org['z'] ,max_seg_length)
 
             # 2. Update the scatter plot data
             new_offsets = np.column_stack((original_limiter_r, original_limiter_z))
