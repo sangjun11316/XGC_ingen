@@ -849,6 +849,9 @@ class TommsInputGenerator:
         # Plot currently selected points (initially empty) - store line handle
         selected_line, = ax.plot([], [], 'ro-', label='New Wall (Click to add)', markersize=6)
 
+        # DEBUG: Visual marker for the snapping reference
+        snap_marker, = ax.plot([], [], 'bx', markersize=12, markeredgewidth=2, label='Snap Ref (Last Point)')
+
         ax.set_xlabel('R [m]')
         ax.set_ylabel('Z [m]')
         ax.set_title('Left: Select | Shift+Click: Extend (Snap)')
@@ -866,7 +869,7 @@ class TommsInputGenerator:
         last_selected_coords   = {'r': None, 'z': None}
 
         # --- Helpers ---
-        def update_selection_state():
+        def update_selection_state(active_idx=None):
             """Refreshes the red line and updates the last_selected tracker."""
             if len(selected_indices) > 0:
                 sorted_indices = sorted(list(selected_indices))
@@ -875,14 +878,23 @@ class TommsInputGenerator:
                 selected_line.set_data(self.wall['r'], self.wall['z'])
                 
                 # Update last coords for snapping (use the last point in the chain)
-                last_idx = sorted_indices[-1]
+                if active_idx is not None and active_idx in selected_indices:
+                    last_idx = active_idx
+                else:
+                    last_idx = sorted_indices[-1]
                 last_selected_coords['r'] = current_wall_r[last_idx]
                 last_selected_coords['z'] = current_wall_z[last_idx]
+
+                # Update visual marker for debugging
+                snap_marker.set_data([last_selected_coords['r']], [last_selected_coords['z']])
             else:
                 self.wall = {}
                 selected_line.set_data([], [])
                 last_selected_coords['r'] = None
                 last_selected_coords['z'] = None
+
+                # Hide visual marker
+                snap_marker.set_data([], [])
             
             fig.canvas.draw_idle()
 
@@ -976,7 +988,7 @@ class TommsInputGenerator:
                     dz = abs(click_z - ref_z)
                     
                     r_view_width = ax.get_xlim()[1] - ax.get_xlim()[0]
-                    snap_tol = 0.1 * r_view_width
+                    snap_tol = 0.05 * r_view_width
                     print(f"snap_tol {snap_tol:.3f}")
                     if dr < snap_tol or dz < snap_tol:
                         if dr < dz and dr < snap_tol: 
@@ -1016,7 +1028,7 @@ class TommsInputGenerator:
                 
                 # 5. Update visuals
                 densified_scatter.set_offsets(np.column_stack((current_wall_r, current_wall_z)))
-                update_selection_state()
+                update_selection_state(active_idx=insert_idx)
                 return
 
             # --- MODE 2: TOGGLE SELECTION (NORMAL CLICK) ---
@@ -1024,10 +1036,12 @@ class TommsInputGenerator:
             margin = 0.05 * r_range 
 
             if min_dist < margin:
+                target_active=None
                 if idx_min not in selected_indices:
                     # Select
                     print(f"Adding point {idx_min}: (R={current_wall_r[idx_min]:.3f}, Z={current_wall_z[idx_min]:.3f})")
                     selected_indices.add(idx_min)
+                    target_active = idx_min
                 else:
                     # Deselect
                     print(f"Removing point {idx_min}")
@@ -1059,7 +1073,7 @@ class TommsInputGenerator:
                         # Update grey scatter
                         densified_scatter.set_offsets(np.column_stack((current_wall_r, current_wall_z)))
 
-                update_selection_state()
+                update_selection_state(active_idx=target_active)
             else:
                 print("Click is too far from any point. Try clicking closer (or Shift+Click to Extend).")
 
