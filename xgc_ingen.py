@@ -989,21 +989,19 @@ class TommsInputGenerator:
                     
                     r_view_width = ax.get_xlim()[1] - ax.get_xlim()[0]
                     snap_tol = 0.05 * r_view_width
-                    print(f"snap_tol {snap_tol:.3f}")
                     if dr < snap_tol or dz < snap_tol:
                         if dr < dz and dr < snap_tol: 
                             click_r = ref_r
-                            print(f" -> Snapped Vertical (R={click_r:.3f})")
+                            print(f"Snapped Vertical (R={click_r:.3f})")
                         elif dz < snap_tol:
                             click_z = ref_z
-                            print(f" -> Snapped Horizontal (Z={click_z:.3f})")
+                            print(f"Snapped Horizontal (Z={click_z:.3f})")
                     else:
-                        print(" -> Free placement (No snap)")
+                        print("Free placement (No snap)")
 
                 # 2. Insert Logic
                 insert_idx = idx_min + 1
-                print(f"Extending: Injecting point at index {insert_idx}")
-                print(f"(R={click_r:.3f}, Z={click_z:.3f})")
+                print(f"Injecting point {insert_idx}: (R={click_r:.3f}, Z={click_z:.3f})")
 
                 current_wall_r = np.insert(current_wall_r, insert_idx, click_r)
                 current_wall_z = np.insert(current_wall_z, insert_idx, click_z)
