@@ -969,13 +969,9 @@ class TommsInputGenerator:
                     sorted_indices = sorted(list(selected_indices))
                     self.wall['r'] = original_limiter_r[sorted_indices]
                     self.wall['z'] = original_limiter_z[sorted_indices]
+                    selected_line.set_data(self.wall['r'], self.wall['z']) # for plotting
                 else:
                     self.wall = {} # empty if no indices selected
-
-                # Update the plot data for the red line
-                if len(self.wall['r']) > 0:
-                    selected_line.set_data(self.wall['r'], self.wall['z'])
-                else:
                     selected_line.set_data([], [])
 
                 # Redraw the canvas
