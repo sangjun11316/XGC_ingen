@@ -812,9 +812,11 @@ class TommsInputGenerator:
             return
 
         print("--- Interactive Wall Editor ---")
-        print(" - Click near a point on the 'Original Limiter' (black line) to add/remove it.")
-        print(" - Added points form the 'Simplified Wall' (red line).")
-        print(" - Points are added/removed maintaining original order.")
+        print(" [Left Click]  : Select/Deselect nearest point.")
+        print(" [Shift+Click] : EXTEND wall (Create new point).")
+        print("                 * Snaps to Horizontal/Vertical if within tolerance.")
+        print("                 * Otherwise places freely.")
+        print("                 * Inserts into the array order after the nearest neighbor.")
         print(" - Close the plot window when finished.")
         print("-------------------------------\n")
 
@@ -822,7 +824,9 @@ class TommsInputGenerator:
         # intially 1% of the total R-width of the plot
         f_densify = 0.01
         max_seg_length = f_densify * (np.max(self.wall_org['r']) - np.min(self.wall_org['r']))
-        original_limiter_r, original_limiter_z = densify_line(self.wall_org['r'], self.wall_org['z'] ,max_seg_length)
+        
+        # Initialize the working wall arrays (renamed from original_limiter)
+        current_wall_r, current_wall_z = densify_line(self.wall_org['r'], self.wall_org['z'] ,max_seg_length)
 
         # --- Setup Plot ---
         fig, ax = plt.subplots(figsize=(8, 10))
@@ -836,70 +840,85 @@ class TommsInputGenerator:
         ax.plot(self.eq.rzsep[:, 0], self.eq.rzsep[:, 1], 'tab:orange', linewidth=2, label='Separatrix')
         ax.plot(self.eq.rmag, self.eq.zmag, 'kx', markersize=10, mew=2, label='Magnetic Axis')
 
-        # Plot original limiter - store handle for hover effects if desired later
-        densified_scatter = ax.scatter(original_limiter_r, original_limiter_z, c='gray', label=f'densified ({f_densify*100:.1f}%)', s=8)
+        # Plot current wall points (grey dots) - store handle for updates
+        densified_scatter = ax.scatter(current_wall_r, current_wall_z, c='gray', label=f'densified ({f_densify*100:.1f}%)', s=8)
+        
         ax.plot(self.eq.rzlim[:,0], self.eq.rzlim[:,1], '.-', color='gray', label='Eqdsk Limiter', markersize=4)
-        ax.plot(self.wall_org['r'], self.wall_org['z'], 'k.-', label='Prev wall', markersize=4)
+        ax.plot(self.wall_org['r'], self.wall_org['z'], 'k.-', label='Input Wall', markersize=4, alpha=0.4)
 
         # Plot currently selected points (initially empty) - store line handle
         selected_line, = ax.plot([], [], 'ro-', label='New Wall (Click to add)', markersize=6)
 
         ax.set_xlabel('R [m]')
         ax.set_ylabel('Z [m]')
-        ax.set_title('Interactive Wall Selection\n(Close window when done)')
+        ax.set_title('Left: Select | Shift+Click: Extend (Snap)')
         ax.axis('equal')
-        ax.legend()
+        ax.legend(loc='upper right', fontsize='small')
         ax.grid(True, alpha=0.5)
 
-        # --- Interactive ---
+        # --- Interactive State ---
         self.wall              = {} # Reset selected points for this session
         selected_indices       = set() # Keep track of indices added
+        inserted_indices       = set() # Keep track of indices that were newly inserted
         target_contour_storage = [None]
+        
+        # Track last point for orthogonality snapping
+        last_selected_coords   = {'r': None, 'z': None}
+
+        # --- Helpers ---
+        def update_selection_state():
+            """Refreshes the red line and updates the last_selected tracker."""
+            if len(selected_indices) > 0:
+                sorted_indices = sorted(list(selected_indices))
+                self.wall['r'] = current_wall_r[sorted_indices]
+                self.wall['z'] = current_wall_z[sorted_indices]
+                selected_line.set_data(self.wall['r'], self.wall['z'])
+                
+                # Update last coords for snapping (use the last point in the chain)
+                last_idx = sorted_indices[-1]
+                last_selected_coords['r'] = current_wall_r[last_idx]
+                last_selected_coords['z'] = current_wall_z[last_idx]
+            else:
+                self.wall = {}
+                selected_line.set_data([], [])
+                last_selected_coords['r'] = None
+                last_selected_coords['z'] = None
+            
+            fig.canvas.draw_idle()
 
         def submit_psi_target(text):
             try:
-                # 1. Get the value from the text box
                 psin_val = float(text)
             except ValueError:
-                print(f"{PREFIX_ERRORS}Invalid value. Please enter a number (e.g., '1.05').")
+                print(f"{PREFIX_ERRORS}Invalid value. Please enter a number.")
                 return
 
-            # 2. Remove the *old* contour set, if one exists
+            # Remove old contour
             if target_contour_storage[0]:
                 try:
-                    # New Matplotlib (3.8+) - remove the whole object directly
                     target_contour_storage[0].remove()
                 except AttributeError:
-                    # Old Matplotlib (Pre-3.8) - remove individual collections
                     for collection in target_contour_storage[0].collections:
                         collection.remove()
                 target_contour_storage[0] = None
 
-            # 3. Draw the new contour
+            # Draw new contour
             print(f"... Drawing target contour at psi_N = {psin_val}")
             try:
                 target_cs = ax.contour(
                     self.eq.r, self.eq.z, self.eq.psinrz.T, 
-                    levels=[psin_val], 
-                    colors=['cyan'],  # Use a bright color
-                    linestyles=['--'],
-                    linewidths=[2.0]
+                    levels=[psin_val], colors=['cyan'], linestyles=['--'], linewidths=[2.0]
                 )
-                
-                # 4. Store the new contour set
                 target_contour_storage[0] = target_cs
-                fig.canvas.draw_idle() # Redraw the canvas
+                fig.canvas.draw_idle()
             except Exception as e:
                 print(f"{PREFIX_ERRORS}Could not draw contour: {e}")
 
         def submit_f_densify(text):
-            # Use 'nonlocal' to modify the variables from the outer scope
-            nonlocal f_densify, original_limiter_r, original_limiter_z
-            
+            nonlocal f_densify, current_wall_r, current_wall_z
             try:
                 new_val = float(text)
-                if not (0 < new_val <= 1.0):
-                    raise ValueError("must be > 0 and <= 1.0")
+                if not (0 < new_val <= 1.0): raise ValueError("must be > 0 and <= 1.0")
             except Exception as e:
                 print(f"{PREFIX_ERRORS}Invalid f_densify value: {e}")
                 return
@@ -907,77 +926,142 @@ class TommsInputGenerator:
             f_densify = new_val
             print(f"... Re-densifying wall with f_densify = {f_densify}")
 
-            # 1. Recalculate the densified line
             max_seg_length = f_densify * (np.max(self.wall_org['r']) - np.min(self.wall_org['r']))
-            original_limiter_r, original_limiter_z = densify_line(self.wall_org['r'], self.wall_org['z'] ,max_seg_length)
+            current_wall_r, current_wall_z = densify_line(self.wall_org['r'], self.wall_org['z'] ,max_seg_length)
 
-            # 2. Update the scatter plot data
-            new_offsets = np.column_stack((original_limiter_r, original_limiter_z))
+            new_offsets = np.column_stack((current_wall_r, current_wall_z))
             densified_scatter.set_offsets(new_offsets)
-            
-            # 3. Update the label and redraw the legend
             densified_scatter.set_label(f'densified ({f_densify*100:.1f}%)')
-            ax.legend()
+            ax.legend(loc='upper right', fontsize='small')
             
-            # 4. CRITICAL: Reset the user's selection
+            # Reset selection on re-densify
             selected_indices.clear()
+            inserted_indices.clear()
             self.wall.clear()
             selected_line.set_data([], [])
             print("... Selection has been reset due to re-densification.")
-
-            # 5. Redraw the canvas
             fig.canvas.draw_idle()
 
-        # Create the axes for the textboxes [left, bottom, width, height]
+        # Create textboxes
         ax_box_densify = fig.add_axes([0.15, 0.05, 0.3, 0.05])
         text_box_densify = TextBox(ax_box_densify, 'Densify (0-1):', initial=str(f_densify))
         text_box_densify.on_submit(submit_f_densify)
 
-        ax_box_psi = fig.add_axes([0.6, 0.05, 0.3, 0.05]) #([0.3, 0.05, 0.4, 0.05])
+        ax_box_psi = fig.add_axes([0.6, 0.05, 0.3, 0.05])
         text_box_psi = TextBox(ax_box_psi, r'Target $\psi_N$:', initial='1.05')
         text_box_psi.on_submit(submit_psi_target)
 
         def onclick(event):
-            if event.inaxes != ax: return # Ignore clicks outside the plot area
-            if event.button != 1: return # Ignore right/middle clicks
+            if event.inaxes != ax: return 
+            if event.button != 1: return 
+
+            # Need nonlocal to modify arrays since we might insert/delete points
+            nonlocal current_wall_r, current_wall_z, selected_indices, inserted_indices
 
             click_r, click_z = event.xdata, event.ydata
-            if click_r is None or click_z is None: return # Ignore clicks outside data range
+            if click_r is None or click_z is None: return
 
-            # Calculate distance from click to all original limiter points
-            distances = np.sqrt((original_limiter_r - click_r)**2 + (original_limiter_z - click_z)**2)
-
-            # Find the index of the closest original point
+            # Calculate distance from click to all current wall points
+            distances = np.sqrt((current_wall_r - click_r)**2 + (current_wall_z - click_z)**2)
             idx_min = np.argmin(distances)
             min_dist = distances[idx_min]
 
-            # Define a tolerance margin (adjust as needed, depends on plot scale)
+            # --- MODE 1: EXTEND / INSERT (SHIFT + CLICK) ---
+            if event.key == 'shift':
+                # 1. Snap Logic
+                if last_selected_coords['r'] is not None:
+                    ref_r = last_selected_coords['r']
+                    ref_z = last_selected_coords['z']
+                    dr = abs(click_r - ref_r)
+                    dz = abs(click_z - ref_z)
+                    
+                    r_view_width = ax.get_xlim()[1] - ax.get_xlim()[0]
+                    snap_tol = 0.1 * r_view_width
+                    print(f"snap_tol {snap_tol:.3f}")
+                    if dr < snap_tol or dz < snap_tol:
+                        if dr < dz and dr < snap_tol: 
+                            click_r = ref_r
+                            print(f" -> Snapped Vertical (R={click_r:.3f})")
+                        elif dz < snap_tol:
+                            click_z = ref_z
+                            print(f" -> Snapped Horizontal (Z={click_z:.3f})")
+                    else:
+                        print(" -> Free placement (No snap)")
+
+                # 2. Insert Logic
+                insert_idx = idx_min + 1
+                print(f"Extending: Injecting point at index {insert_idx}")
+                print(f"(R={click_r:.3f}, Z={click_z:.3f})")
+
+                current_wall_r = np.insert(current_wall_r, insert_idx, click_r)
+                current_wall_z = np.insert(current_wall_z, insert_idx, click_z)
+                
+                # 3. Shift existing indices (Selected & Inserted)
+                # Any index >= insert_idx moves up by 1
+                new_selected = set()
+                for idx in selected_indices:
+                    if idx >= insert_idx: new_selected.add(idx + 1)
+                    else: new_selected.add(idx)
+                selected_indices = new_selected
+
+                new_inserted = set()
+                for idx in inserted_indices:
+                    if idx >= insert_idx: new_inserted.add(idx + 1)
+                    else: new_inserted.add(idx)
+                inserted_indices = new_inserted
+                
+                # 4. Add the new point
+                selected_indices.add(insert_idx)
+                inserted_indices.add(insert_idx)
+                
+                # 5. Update visuals
+                densified_scatter.set_offsets(np.column_stack((current_wall_r, current_wall_z)))
+                update_selection_state()
+                return
+
+            # --- MODE 2: TOGGLE SELECTION (NORMAL CLICK) ---
             r_range = ax.get_xlim()[1] - ax.get_xlim()[0]
-            margin = 0.05 * r_range # 5% margin
+            margin = 0.05 * r_range 
 
             if min_dist < margin:
-                # add clicked points
-                if idx_min not in selected_indices: # add clicked point
-                    print(f"Adding point {idx_min}: (R={original_limiter_r[idx_min]:.3f}, Z={original_limiter_z[idx_min]:.3f})")
+                if idx_min not in selected_indices:
+                    # Select
+                    print(f"Adding point {idx_min}: (R={current_wall_r[idx_min]:.3f}, Z={current_wall_z[idx_min]:.3f})")
                     selected_indices.add(idx_min)
-                else: # remove if already selected
+                else:
+                    # Deselect
                     print(f"Removing point {idx_min}")
                     selected_indices.remove(idx_min)
+                    
+                    # IF THIS WAS AN INSERTED POINT, DELETE IT FROM GEOMETRY
+                    if idx_min in inserted_indices:
+                        print(f" ... Deleting inserted point {idx_min} from geometry.")
+                        # Delete from arrays
+                        current_wall_r = np.delete(current_wall_r, idx_min)
+                        current_wall_z = np.delete(current_wall_z, idx_min)
+                        
+                        # Remove from inserted tracker
+                        inserted_indices.remove(idx_min)
+                        
+                        # Shift indices down (Indices > idx_min move down by 1)
+                        new_selected = set()
+                        for idx in selected_indices:
+                            if idx > idx_min: new_selected.add(idx - 1)
+                            else: new_selected.add(idx)
+                        selected_indices = new_selected
 
-                # Rebuild the simplified wall list, maintaining original order
-                if len(selected_indices)>0:
-                    sorted_indices = sorted(list(selected_indices))
-                    self.wall['r'] = original_limiter_r[sorted_indices]
-                    self.wall['z'] = original_limiter_z[sorted_indices]
-                    selected_line.set_data(self.wall['r'], self.wall['z']) # for plotting
-                else:
-                    self.wall = {} # empty if no indices selected
-                    selected_line.set_data([], [])
+                        new_inserted = set()
+                        for idx in inserted_indices:
+                            if idx > idx_min: new_inserted.add(idx - 1)
+                            else: new_inserted.add(idx)
+                        inserted_indices = new_inserted
+                        
+                        # Update grey scatter
+                        densified_scatter.set_offsets(np.column_stack((current_wall_r, current_wall_z)))
 
-                # Redraw the canvas
-                fig.canvas.draw_idle()
+                update_selection_state()
             else:
-                print("Click is too far from any point. Try clicking closer.")
+                print("Click is too far from any point. Try clicking closer (or Shift+Click to Extend).")
 
         # Connect the click event handler
         cid = fig.canvas.mpl_connect('button_press_event', onclick)
@@ -1012,7 +1096,8 @@ class TommsInputGenerator:
             ax_final.plot(self.eq.rzsep[:, 0], self.eq.rzsep[:, 1], 'tab:orange', linewidth=2, label='Separatrix')
             ax_final.plot(self.eq.rmag, self.eq.zmag, 'kx', markersize=10, mew=2, label='Magnetic Axis')
 
-            ax_final.plot(original_limiter_r, original_limiter_z, 'k.-', label='Original Limiter', markersize=4, alpha=0.3)
+            # Show the final "current" wall structure (including injected points)
+            ax_final.plot(current_wall_r, current_wall_z, 'k.-', label='Modified Wall Geometry', markersize=4, alpha=0.3)
             ax_final.plot(self.wall['r'], self.wall['z'], 'ro-', label='Final Simplified Wall (Closed)', markersize=6)
             ax_final.scatter(first_point[0], first_point[1], facecolors='none', edgecolors='b')
             ax_final.set_xlabel('R [m]')
