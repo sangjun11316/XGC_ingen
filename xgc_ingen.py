@@ -898,6 +898,24 @@ class TommsInputGenerator:
             
             fig.canvas.draw_idle()
 
+        def reset_selection_to_original():
+            """Clears selection and re-selects points closest to the original wall vertices."""
+            selected_indices.clear()
+            inserted_indices.clear()
+            
+            # Map wall_org points to indices in current_wall (densified grid)
+            for ro, zo in zip(self.wall_org['r'], self.wall_org['z']):
+                dists = np.sqrt((current_wall_r - ro)**2 + (current_wall_z - zo)**2)
+                idx = np.argmin(dists)
+                selected_indices.add(idx)
+            
+            update_selection_state()
+
+        # Initialize with the given wall_file (if given)
+        if self.params['wall_file']:
+            print("... Starting with original wall points selected.")
+            reset_selection_to_original()
+
         def submit_psi_target(text):
             try:
                 psin_val = float(text)
@@ -946,13 +964,17 @@ class TommsInputGenerator:
             densified_scatter.set_label(f'densified ({f_densify*100:.1f}%)')
             ax.legend(loc='upper right', fontsize='small')
             
-            # Reset selection on re-densify
-            selected_indices.clear()
-            inserted_indices.clear()
-            self.wall.clear()
-            selected_line.set_data([], [])
-            print("... Selection has been reset due to re-densification.")
-            fig.canvas.draw_idle()
+            if self.params['wall_file']:
+                print(f"... Selection has been reset (to {self.params['wall_file']}) due to re-densification.")
+                reset_selection_to_original()
+            else:
+                # Reset selection on re-densify
+                selected_indices.clear()
+                inserted_indices.clear()
+                self.wall.clear()
+                selected_line.set_data([], [])
+                print("... Selection has been reset (to None) due to re-densification.")
+                fig.canvas.draw_idle()
 
         # Create textboxes
         ax_box_densify = fig.add_axes([0.15, 0.05, 0.3, 0.05])
