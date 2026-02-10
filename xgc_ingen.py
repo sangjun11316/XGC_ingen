@@ -867,6 +867,7 @@ class TommsInputGenerator:
         
         # Track last point for orthogonality snapping
         last_selected_coords   = {'r': None, 'z': None}
+        active_snap_idx        = [None]
 
         # --- Helpers ---
         def update_selection_state(active_idx=None):
@@ -879,17 +880,24 @@ class TommsInputGenerator:
                 
                 # Update last coords for snapping (use the last point in the chain)
                 if active_idx is not None and active_idx in selected_indices:
-                    last_idx = active_idx
-                else:
-                    last_idx = sorted_indices[-1]
-                last_selected_coords['r'] = current_wall_r[last_idx]
-                last_selected_coords['z'] = current_wall_z[last_idx]
-
-                # Update visual marker for debugging
+                    active_snap_idx[0] = active_idx
+                
+                # 2. Validation: Ensure current active index is still valid/selected
+                # If the active point was removed (or None), fallback to the last point in the chain
+                if active_snap_idx[0] is None or active_snap_idx[0] not in selected_indices:
+                    active_snap_idx[0] = sorted_indices[-1]
+                
+                # 3. Update Coords based on the (possibly new) active index
+                idx = active_snap_idx[0]
+                last_selected_coords['r'] = current_wall_r[idx]
+                last_selected_coords['z'] = current_wall_z[idx]
+                
+                # Update visual marker
                 snap_marker.set_data([last_selected_coords['r']], [last_selected_coords['z']])
             else:
                 self.wall = {}
                 selected_line.set_data([], [])
+                active_snap_idx[0] = None
                 last_selected_coords['r'] = None
                 last_selected_coords['z'] = None
 
@@ -909,6 +917,12 @@ class TommsInputGenerator:
                 idx = np.argmin(dists)
                 selected_indices.add(idx)
             
+            # Set initial active point to the last one in the sorted list
+            if selected_indices:
+                active_snap_idx[0] = sorted(list(selected_indices))[-1]
+            else:
+                active_snap_idx[0] = None
+
             update_selection_state()
 
         # Initialize with the given wall_file (if given)
@@ -1042,6 +1056,10 @@ class TommsInputGenerator:
                     else: new_inserted.add(idx)
                 inserted_indices = new_inserted
                 
+                # Update the active snap index tracker if it's shifting up
+                if active_snap_idx[0] is not None and active_snap_idx[0] >= insert_idx:
+                    active_snap_idx[0] += 1
+                
                 # 4. Add the new point
                 selected_indices.add(insert_idx)
                 inserted_indices.add(insert_idx)
@@ -1056,7 +1074,7 @@ class TommsInputGenerator:
             margin = 0.05 * r_range 
 
             if min_dist < margin:
-                target_active=None
+                target_active = None
                 if idx_min not in selected_indices:
                     # Select
                     print(f"Adding point {idx_min}: (R={current_wall_r[idx_min]:.3f}, Z={current_wall_z[idx_min]:.3f})")
@@ -1067,7 +1085,7 @@ class TommsInputGenerator:
                     print(f"Removing point {idx_min}")
                     selected_indices.remove(idx_min)
                     
-                    # IF THIS WAS AN INSERTED POINT, DELETE IT FROM GEOMETRY
+                    # If this was an inserted point, delete it from geometry
                     if idx_min in inserted_indices:
                         print(f" ... Deleting inserted point {idx_min} from geometry.")
                         # Delete from arrays
@@ -1077,7 +1095,14 @@ class TommsInputGenerator:
                         # Remove from inserted tracker
                         inserted_indices.remove(idx_min)
                         
-                        # Shift indices down (Indices > idx_min move down by 1)
+                        # Handle shifting of active snap index
+                        if active_snap_idx[0] is not None:
+                            if active_snap_idx[0] == idx_min:
+                                active_snap_idx[0] = None # Removed active
+                            elif active_snap_idx[0] > idx_min:
+                                active_snap_idx[0] -= 1
+
+                        # Shift indices down
                         new_selected = set()
                         for idx in selected_indices:
                             if idx > idx_min: new_selected.add(idx - 1)
@@ -1092,6 +1117,10 @@ class TommsInputGenerator:
                         
                         # Update grey scatter
                         densified_scatter.set_offsets(np.column_stack((current_wall_r, current_wall_z)))
+                    else:
+                        # Deselecting an original point
+                        if active_snap_idx[0] == idx_min:
+                            active_snap_idx[0] = None # Removed active
 
                 update_selection_state(active_idx=target_active)
             else:
