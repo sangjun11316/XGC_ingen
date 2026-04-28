@@ -478,9 +478,9 @@ class TommsInputGenerator:
         psinmid = (psimid - self.eq.smag) / (self.eq.sbdy - self.eq.smag)
         '''
 
-        psi_interpolator = RectBivariateSpline(self.eq.r, self.eq.z, np.sqrt(self.eq.psirz - self.eq.smag), kx=3, ky=3)
+        psi_interpolator = RectBivariateSpline(self.eq.r, self.eq.z, np.sqrt(np.abs(self.eq.psirz - self.eq.smag)), kx=3, ky=3)
         psimid = (psi_interpolator.ev(rmid, zmid))**2
-        psinmid = psimid / (self.eq.sbdy - self.eq.smag)
+        psinmid = psimid / np.abs(self.eq.sbdy - self.eq.smag)
 
         # fix the value at the axis to zero
         psinmid[0] = 0.0
