@@ -162,7 +162,7 @@ if __name__ == "__main__":
     # 1. Extrapolate SOL (applies to Ne, Te, Ti)
     psi_sep = 0.995
     psi_max = 1.3
-    target_floor = 50.0
+    target_floor = 10
     mod.extrapolate_sol(psi_sep=psi_sep, psi_max=psi_max, target_floor=target_floor)
     
     # 2. Apply Ti Clamp (Heuristic: if filename contains 't' or 'T')

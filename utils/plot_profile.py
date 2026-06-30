@@ -19,12 +19,13 @@ def plot_profiles(filenames):
         print("No files provided to plot.")
         return
 
-    fig, axs = plt.subplots(3, 1, figsize=(6, 10), sharex=True)
+    fig, axs = plt.subplots(3, 1, figsize=(4,9), sharex=True)
     
     # Cycle through colors/markers
-    colors     = ['tab:blue', 'r', 'b', 'g', 'm', 'k']
+    colors     = ['tab:blue', 'r', 'b', 'gray', 'm', 'k']
     markers    = ['o', 'x', 's', '^', 'v', '*']
     linestyles = ['-', '-', '--', '-.', ':', '-']
+    zorders    = [3, 3, 2, 2, 2, 1] # Higher zorder means plotted on top
 
     for i, fname in enumerate(filenames):
         if not os.path.exists(fname):
@@ -46,14 +47,15 @@ def plot_profiles(filenames):
             c  = colors[i % len(colors)]
             m  = markers[i % len(markers)]
             ls = linestyles[i % len(linestyles)]
+            zo = zorders[i % len(zorders)]
             
             # --- Plot 0: Main Value ---
             axs[0].plot(psi, val, label=label_str, color=c, marker=m, 
-                        markersize=4, linestyle=ls, alpha=0.8)
+                        markersize=4, linestyle=ls, alpha=0.8, zorder=zo)
             
             # --- Plot 1: 1st Derivative ---
             axs[1].plot(psi, d1, label=f"d/d$\psi$ {label_str}", color=c, marker=m, 
-                        markersize=4, linestyle=ls, alpha=0.8)
+                        markersize=4, linestyle=ls, alpha=0.8, zorder=zo)
 
             # --- Plot 2: 2nd Derivative ---
             axs[2].plot(psi, d2, label=f"d$^2$/d$\psi^2$ {label_str}", color=c, marker=m, 
@@ -67,7 +69,7 @@ def plot_profiles(filenames):
     # Subplot 0 (Main)
     axs[0].set_ylabel('Value')
     axs[0].set_title('Profile Comparison')
-    #axs[0].set_ylim(0, 1800) # Keep your specific limits for the main plot
+    # axs[0].set_ylim(-100, 4000) # Keep your specific limits for the main plot
     axs[0].legend(loc='best', fontsize='small')
 
     # Subplot 1 (Gradient)
@@ -80,10 +82,13 @@ def plot_profiles(filenames):
     
     # Common X-axis label (only on the bottom plot)
     axs[2].set_xlabel(r'Normalized Poloidal Flux ($\psi_N$)')
-    axs[2].set_xlim(0.85, 1.1)
+    axs[2].set_xlim(0.8, 1.1)
 
     # Grid for all
     for ax in axs:
+        ax.tick_params(labelbottom=True)
+        ax.set_xlabel(r'Normalized Poloidal Flux ($\psi_N$)')
+
         ax.grid(True, which='major', linestyle='-', alpha=0.6)
         ax.minorticks_on()
         ax.grid(True, which='minor', linestyle=':', alpha=0.3)

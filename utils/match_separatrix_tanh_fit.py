@@ -271,7 +271,7 @@ if __name__ == "__main__":
     
     # --- CONFIGURATION ---
     
-    TARGET_SEP_VAL = 100.0   # The value you want at psi = 1.0
+    TARGET_SEP_VAL = 250   # The value you want at psi = 1.0
     
     # METHOD 1: Shift (Uncomment to use)
     # mod.match_separatrix_by_shift(TARGET_SEP_VAL)
@@ -281,14 +281,15 @@ if __name__ == "__main__":
     mod.match_separatrix_by_tanh_fit(TARGET_SEP_VAL, fit_range=(0.92, 1.05))
 
     # --- SOL DECAY (Applied after the shift/fit) ---
-    psi_start = 1.0  # Start decay exactly at separatrix (since we just fixed it there)
+    psi_start = 0.95  # Start decay exactly at separatrix (since we just fixed it there)
     psi_knee  = 1.05
     
     # Use the target value we just set as the starting point for decay logic
     val_at_sep = TARGET_SEP_VAL 
     
     target_val_at_knee = val_at_sep * 0.2  # Fast drop in near-SOL
-    floor_val = val_at_sep * 0.01          # Far SOL floor
+    # floor_val = val_at_sep * 0.01          # Far SOL floor
+    floor_val = 10
     
     mod.double_exponential_sol(
         psi_start=psi_start, 

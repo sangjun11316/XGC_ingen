@@ -186,9 +186,10 @@ class ProfileModifier:
         axs[0].plot(self.psi, self.val, 'r-', lw=2, label='Modified')
         if hasattr(self, 'trans_pts'):
             axs[0].axvline(self.trans_pts[0], c='g', ls=':', label='Start')
-            axs[0].axvline(self.trans_pts[1], c='b', ls=':', label='Separatrix')
+            axs[0].axvline(self.trans_pts[1], c='b', ls=':', label='End')
+            axs[0].axvline(1.0, c='k', ls='--', label='Separatrix')
         axs[0].set_ylabel('Value')
-        axs[0].set_yscale('log')
+        # axs[0].set_yscale('log')
         axs[0].legend()
         axs[0].grid(True, alpha=0.3)
         
@@ -211,9 +212,9 @@ if __name__ == "__main__":
     mod = ProfileModifier(sys.argv[1])
     
     # --- USER SETTINGS ---
-    PSI_START = 0.94   
-    PSI_SEP   = 1.00   
-    FLOOR_VAL = 2.38945E17  
+    PSI_START = 0.95   
+    PSI_SEP   = 1.0   
+    FLOOR_VAL = 2.5E18  
 
     # --- CHOOSE MODE ---
     
@@ -221,8 +222,8 @@ if __name__ == "__main__":
     # mod.solve_smooth_connection(PSI_START, target_val_sep=None, floor_val=FLOOR_VAL, psi_sep=PSI_SEP, k_shape=40.0)
 
     # Option 2: Tanh (Pedestal Shape)
-    TARGET_SEP = 0.6E18
-    WIDTH      = 0.04
+    TARGET_SEP = 4E18
+    WIDTH      = 0.05
     mod.solve_smooth_tanh_connection(PSI_START, TARGET_SEP, FLOOR_VAL, PSI_SEP, w_tanh=WIDTH)
     
     mod.plot()
