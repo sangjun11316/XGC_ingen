@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import ast
 import json
 import sys
 import tkinter as tk
@@ -100,6 +101,8 @@ class ProfileEditorApp(tk.Tk):
         self.markers: list[float] = []
         self.overlays: list[ProfileData] = []
         self.experiments: list[ProfileData] = []
+        self.experiment_scales: list[str] = []
+        self._experiment_scale_editor = None
 
         self._build_vars()
         self._build_layout()
@@ -403,15 +406,27 @@ class ProfileEditorApp(tk.Tk):
 
         add_experiment_button = ttk.Button(frame, text="Add Experiment...", command=self.add_experiment_dialog)
         add_experiment_button.grid(row=0, column=0, sticky="ew")
-        self.experiment_list = tk.Listbox(frame, height=4, exportselection=False)
-        self.experiment_list.grid(row=1, column=0, sticky="nsew", pady=(4, 0))
+        self.experiment_table = ttk.Treeview(
+            frame,
+            columns=("scale",),
+            height=5,
+            selectmode="extended",
+        )
+        self.experiment_table.heading("#0", text="File")
+        self.experiment_table.heading("scale", text="Scale")
+        self.experiment_table.column("#0", width=230, minwidth=120, stretch=True)
+        self.experiment_table.column("scale", width=70, minwidth=55, stretch=False, anchor="center")
+        self.experiment_table.grid(row=1, column=0, sticky="nsew", pady=(4, 0))
+        self.experiment_table.bind("<Double-1>", self._edit_experiment_scale)
         remove_experiment_button = ttk.Button(frame, text="Remove Selected", command=self.remove_experiment_selection)
         remove_experiment_button.grid(row=2, column=0, sticky="ew", pady=(4, 0))
         experiment_tip = (
             "Add experimental/reference points as filled square markers on the Value panel only. "
-            "Repeated psi values are allowed because no derivatives are computed for these files."
+            "Repeated psi values are allowed because no derivatives are computed for these files. "
+            "Double-click the Scale cell to enter an optional scalar or expression such as 1/3; "
+            "a scaled copy is drawn as hollow squares."
         )
-        self._add_tooltip((add_experiment_button, self.experiment_list), experiment_tip)
+        self._add_tooltip((add_experiment_button, self.experiment_table), experiment_tip)
         self._add_tooltip(remove_experiment_button, "Remove the selected experimental point set from the Value panel.")
 
     def _build_plot_controls(self, parent: ttk.Frame, row: int) -> None:
@@ -715,14 +730,15 @@ class ProfileEditorApp(tk.Tk):
         for filename in filenames:
             self.add_experiment(Path(filename))
 
-    def add_experiment(self, path: Path) -> None:
+    def add_experiment(self, path: Path, scale: str = "") -> None:
         try:
             profile = read_prf(path, require_strict_psi=False)
         except Exception as exc:
             messagebox.showerror("Could not open experimental profile", str(exc))
             return
         self.experiments.append(profile)
-        self.experiment_list.insert(tk.END, profile.label)
+        self.experiment_scales.append(scale.strip())
+        self._refresh_experiment_table()
         self.status_var.set(f"Added experimental profile {profile.label}.")
         self.refresh_plot()
 
@@ -746,9 +762,14 @@ class ProfileEditorApp(tk.Tk):
                 self.add_overlay(path)
 
         for item in data.get("experiments", []):
-            path = self._path_from_session(item)
+            scale = ""
+            path_item = item
+            if isinstance(item, dict):
+                path_item = item.get("path")
+                scale = str(item.get("scale", "")).strip()
+            path = self._path_from_session(path_item)
             if path:
-                self.add_experiment(path)
+                self.add_experiment(path, scale=scale)
 
         closed_at = data.get("closed_at", "")
         if self.current:
@@ -759,7 +780,11 @@ class ProfileEditorApp(tk.Tk):
             "closed_at": datetime.now().isoformat(timespec="seconds"),
             "profile": str(self.profile_path) if self.profile_path else None,
             "overlays": [str(profile.path) for profile in self.overlays if profile.path],
-            "experiments": [str(profile.path) for profile in self.experiments if profile.path],
+            "experiments": [
+                {"path": str(profile.path), "scale": self.experiment_scales[i] if i < len(self.experiment_scales) else ""}
+                for i, profile in enumerate(self.experiments)
+                if profile.path
+            ],
         }
         try:
             SESSION_FILE.write_text(json.dumps(data, indent=2))
@@ -779,13 +804,80 @@ class ProfileEditorApp(tk.Tk):
         return path
 
     def remove_experiment_selection(self) -> None:
-        selection = list(self.experiment_list.curselection())
+        self._cancel_experiment_scale_edit()
+        selection = list(self.experiment_table.selection())
         if not selection:
             return
-        for idx in reversed(selection):
-            self.experiment_list.delete(idx)
+        for idx in sorted((int(item) for item in selection), reverse=True):
             self.experiments.pop(idx)
+            self.experiment_scales.pop(idx)
+        self._refresh_experiment_table()
         self.refresh_plot()
+
+    def _refresh_experiment_table(self) -> None:
+        if not hasattr(self, "experiment_table"):
+            return
+        self._cancel_experiment_scale_edit()
+        self.experiment_table.delete(*self.experiment_table.get_children())
+        for i, experiment in enumerate(self.experiments):
+            scale = self.experiment_scales[i] if i < len(self.experiment_scales) else ""
+            self.experiment_table.insert("", "end", iid=str(i), text=experiment.label, values=(scale,))
+
+    def _edit_experiment_scale(self, event) -> None:
+        if self.experiment_table.identify_region(event.x, event.y) != "cell":
+            return
+        column = self.experiment_table.identify_column(event.x)
+        if column != "#1":
+            return
+        iid = self.experiment_table.identify_row(event.y)
+        if not iid:
+            return
+        bbox = self.experiment_table.bbox(iid, column)
+        if not bbox:
+            return
+
+        self._cancel_experiment_scale_edit()
+        x, y, width, height = bbox
+        entry = ttk.Entry(self.experiment_table)
+        entry.insert(0, self.experiment_scales[int(iid)])
+        entry.select_range(0, tk.END)
+        entry.place(x=x, y=y, width=width, height=height)
+        entry.focus_set()
+        self._experiment_scale_editor = entry
+
+        def commit(_event=None):
+            if self._experiment_scale_editor is not entry:
+                return "break"
+            text = entry.get().strip()
+            if text:
+                try:
+                    self._parse_scale_expression(text)
+                except ValueError:
+                    self.status_var.set("Experimental scale must be numeric, e.g. 0.5 or 1/3, or blank to hide scaled points.")
+                    entry.focus_set()
+                    entry.select_range(0, tk.END)
+                    return "break"
+            self.experiment_scales[int(iid)] = text
+            self._cancel_experiment_scale_edit()
+            self._refresh_experiment_table()
+            self.refresh_plot()
+            return "break"
+
+        def cancel(_event=None):
+            if self._experiment_scale_editor is not entry:
+                return "break"
+            self._cancel_experiment_scale_edit()
+            return "break"
+
+        entry.bind("<Return>", commit)
+        entry.bind("<FocusOut>", commit)
+        entry.bind("<Escape>", cancel)
+
+    def _cancel_experiment_scale_edit(self) -> None:
+        if self._experiment_scale_editor is not None:
+            editor = self._experiment_scale_editor
+            self._experiment_scale_editor = None
+            editor.destroy()
 
     def refresh_plot(self, preserve_view: bool = True) -> None:
         view_limits = self._capture_view_limits() if preserve_view else None
@@ -828,6 +920,7 @@ class ProfileEditorApp(tk.Tk):
         exp_colors = ["b", "r", "g", "m", "c", "y"]
         for i, experiment in enumerate(self.experiments):
             color = exp_colors[i % len(exp_colors)]
+            scale_text = self.experiment_scales[i] if i < len(self.experiment_scales) else ""
             self.axes[0].scatter(
                 experiment.psi,
                 experiment.value,
@@ -840,6 +933,24 @@ class ProfileEditorApp(tk.Tk):
                 label=f"Exp: {experiment.label}",
                 zorder=8,
             )
+            if scale_text:
+                try:
+                    scale = self._parse_scale_expression(scale_text)
+                except ValueError:
+                    scale = None
+                if scale is not None:
+                    self.axes[0].scatter(
+                        experiment.psi,
+                        experiment.value * scale,
+                        s=38,
+                        marker="s",
+                        facecolors="none",
+                        edgecolors=color,
+                        linewidths=1.2,
+                        alpha=0.55,
+                        label=f"Exp x{scale:g}: {experiment.label}",
+                        zorder=9,
+                    )
 
         for marker in self.markers:
             for ax in self.axes:
@@ -950,6 +1061,40 @@ class ProfileEditorApp(tk.Tk):
             return True
         messagebox.showinfo("No profile", "Open a profile before applying a modification.")
         return False
+
+    def _parse_scale_expression(self, text: str) -> float:
+        allowed_binops = (ast.Add, ast.Sub, ast.Mult, ast.Div, ast.Pow)
+        allowed_unary = (ast.UAdd, ast.USub)
+
+        def eval_node(node):
+            if isinstance(node, ast.Expression):
+                return eval_node(node.body)
+            if isinstance(node, ast.Constant) and isinstance(node.value, (int, float)) and not isinstance(node.value, bool):
+                return float(node.value)
+            if isinstance(node, ast.BinOp) and isinstance(node.op, allowed_binops):
+                left = eval_node(node.left)
+                right = eval_node(node.right)
+                if isinstance(node.op, ast.Add):
+                    return left + right
+                if isinstance(node.op, ast.Sub):
+                    return left - right
+                if isinstance(node.op, ast.Mult):
+                    return left * right
+                if isinstance(node.op, ast.Div):
+                    return left / right
+                return left**right
+            if isinstance(node, ast.UnaryOp) and isinstance(node.op, allowed_unary):
+                value = eval_node(node.operand)
+                return value if isinstance(node.op, ast.UAdd) else -value
+            raise ValueError("unsupported scale expression")
+
+        try:
+            value = eval_node(ast.parse(text, mode="eval"))
+        except Exception as exc:
+            raise ValueError("unsupported scale expression") from exc
+        if not (-1.0e300 < value < 1.0e300):
+            raise ValueError("scale expression is not finite")
+        return value
 
     def _float(self, var: tk.StringVar, label: str) -> float:
         try:
