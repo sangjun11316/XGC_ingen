@@ -13,7 +13,7 @@ python ../xgc_ingen.py
 <img src="docs/images/xgc_ingen_docs.png" alt="XGC ingen procedure" width="700">
 
 # Profile editor
-The profile utilities have a GUI wrapper for the common modification workflow:
+## Common GUI workflow
 
 ```sh
 python utils/profile_gui.py
@@ -21,19 +21,19 @@ python utils/profile_gui.py
 
 <img src="docs/images/xgc_profile_gui_overall.png" alt="XGC profile modifier GUI overall" width="700">
 
-Optional GUI launch with files:
+## Optional GUI launch with files
 
 ```sh
 python utils/profile_gui.py path/to/profile.prf --overlay path/to/experiment.prf
 ```
 
-The editor supports:
+## Supported features
 
-Comparison and output:
+### Comparison and output
 - original/previous/current comparison with value, first derivative, and second derivative views
 - saving the modified profile back to TOMMS `.prf` format
 
-Profile modifications:
+### Profile modifications
 - radial psi-axis shifting
 - pedestal-top smoothing with C1 cubic flattening and optional post-diffusion passes in boundary patches
 - fixed-separatrix tanh or exponential connection with SOL floor
