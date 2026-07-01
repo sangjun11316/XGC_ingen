@@ -22,6 +22,7 @@ class TransformResult:
     markers: list[float]
     summary: str
     patch_markers: list[float] = field(default_factory=list)
+    diffused_indices: list[int] = field(default_factory=list)
 
 
 def read_prf(filename: str | Path, *, require_strict_psi: bool = True) -> ProfileData:
@@ -98,6 +99,7 @@ def smooth_pedestal_top(
     patch_width: float = 0.0,
     patch_passes: int = 0,
     patch_alpha: float = 0.25,
+    patch_n_min: int = 3,
 ) -> TransformResult:
     _validate_profile(psi, value)
     if psi_start >= psi_end:
@@ -120,6 +122,8 @@ def smooth_pedestal_top(
         raise ValueError("patch_passes must be non-negative")
     if not 0.0 <= patch_alpha <= 0.5:
         raise ValueError("patch_alpha must be between 0 and 0.5")
+    if patch_n_min < 3:
+        raise ValueError("patch_n_min must be at least 3")
 
     y0, dy0 = _local_value_and_slope(psi, value, psi_start, half_window, poly_deg)
     y1, dy1 = _local_value_and_slope(psi, value, psi_end, half_window, poly_deg)
@@ -141,10 +145,16 @@ def smooth_pedestal_top(
     mask = (psi >= psi_start) & (psi <= psi_end)
     value_new[mask] = func(psi[mask])
 
+    diffused_indices: list[int] = []
     if patch_width > 0.0 and patch_passes > 0:
-        _diffuse_patch_slice(value_new, psi, psi_start - patch_width, psi_start + patch_width, patch_passes, patch_alpha)
-        _diffuse_patch_slice(value_new, psi, psi_end - patch_width, psi_end + patch_width, patch_passes, patch_alpha)
-        summary += f", patch_width={patch_width:g}, patch_passes={patch_passes}, patch_alpha={patch_alpha:g}"
+        diffused_indices.extend(
+            _diffuse_patch_slice(value_new, psi, psi_start - patch_width, psi_start + patch_width, patch_passes, patch_alpha, patch_n_min)
+        )
+        diffused_indices.extend(
+            _diffuse_patch_slice(value_new, psi, psi_end - patch_width, psi_end + patch_width, patch_passes, patch_alpha, patch_n_min)
+        )
+        diffused_indices = sorted(set(diffused_indices))
+        summary += f", patch_width={patch_width:g}, patch_passes={patch_passes}, patch_alpha={patch_alpha:g}, patch_n_min={patch_n_min}"
     patch_markers = (
         [psi_start - patch_width, psi_start + patch_width, psi_end - patch_width, psi_end + patch_width]
         if patch_width > 0.0 and patch_passes > 0
@@ -157,6 +167,7 @@ def smooth_pedestal_top(
         markers=[psi_start, psi_end],
         summary=summary,
         patch_markers=patch_markers,
+        diffused_indices=diffused_indices,
     )
 
 
@@ -362,13 +373,20 @@ def _diffuse_patch_slice(
     psi_right: float,
     passes: int,
     alpha: float,
-) -> None:
+    n_min: int,
+) -> list[int]:
     indices = np.flatnonzero((psi >= psi_left) & (psi <= psi_right))
-    if passes <= 0 or len(indices) < 3:
-        return
+    if passes <= 0 or len(indices) == 0:
+        return []
 
     start = int(indices[0])
     stop = int(indices[-1]) + 1
+    while stop - start < n_min and (start > 0 or stop < len(value)):
+        start = max(0, start - 1)
+        stop = min(len(value), stop + 1)
+    if stop - start < 3:
+        return []
+
     patch = value[start:stop].copy()
     tmp = patch.copy()
     for _ in range(passes):
@@ -377,6 +395,7 @@ def _diffuse_patch_slice(
         tmp[1:-1] = alpha * patch[:-2] + (1.0 - 2.0 * alpha) * patch[1:-1] + alpha * patch[2:]
         patch, tmp = tmp, patch
     value[start:stop] = patch
+    return list(range(start, stop))
 
 
 def _start_conditions(psi: np.ndarray, value: np.ndarray, psi_start: float) -> tuple[float, float]:

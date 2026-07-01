@@ -101,6 +101,7 @@ class ProfileEditorApp(tk.Tk):
         self.history: list[ProfileData] = []
         self.markers: list[float] = []
         self.patch_markers: list[float] = []
+        self.diffused_indices: list[int] = []
         self.overlays: list[ProfileData] = []
         self.experiments: list[ProfileData] = []
         self.experiment_scales: list[str] = []
@@ -137,6 +138,7 @@ class ProfileEditorApp(tk.Tk):
         self.smooth_patch_width_var = tk.StringVar(value="0.005")
         self.smooth_patch_passes_var = tk.StringVar(value="4")
         self.smooth_patch_alpha_var = tk.StringVar(value="0.25")
+        self.smooth_patch_n_min_var = tk.StringVar(value="3")
 
         self.shift_delta_var = tk.StringVar(value="-0.01")
         self.shift_ref_var = tk.StringVar(value="1.0")
@@ -249,9 +251,11 @@ class ProfileEditorApp(tk.Tk):
         half_window_widgets = self._add_field(smooth_tab, "half window", self.smooth_half_window_var, 2)
         poly_degree_widgets = self._add_field(smooth_tab, "poly degree", self.smooth_poly_deg_var, 3)
         smooth_strength_widgets = self._add_field(smooth_tab, "smooth strength", self.smooth_strength_var, 4)
-        patch_width_widgets = self._add_field(smooth_tab, "patch width", self.smooth_patch_width_var, 5)
-        patch_passes_widgets = self._add_field(smooth_tab, "patch passes", self.smooth_patch_passes_var, 6)
-        patch_alpha_widgets = self._add_field(smooth_tab, "patch alpha", self.smooth_patch_alpha_var, 7)
+        ttk.Separator(smooth_tab, orient="horizontal").grid(row=5, column=0, columnspan=2, sticky="ew", pady=(8, 6))
+        patch_width_widgets = self._add_field(smooth_tab, "patch width", self.smooth_patch_width_var, 6)
+        patch_n_min_widgets = self._add_field(smooth_tab, "patch n_min", self.smooth_patch_n_min_var, 7)
+        patch_passes_widgets = self._add_field(smooth_tab, "patch passes", self.smooth_patch_passes_var, 8)
+        patch_alpha_widgets = self._add_field(smooth_tab, "patch alpha", self.smooth_patch_alpha_var, 9)
         self._add_tooltip(
             smooth_start_widgets,
             "Start of the interval replaced by the C1 cubic Hermite segment. Points below this psi are left unchanged.",
@@ -291,7 +295,13 @@ class ProfileEditorApp(tk.Tk):
             "Diffusion coefficient for each pass: new[i] = alpha*old[i-1] + (1-2*alpha)*old[i] + alpha*old[i+1]. "
             "Use 0 to 0.5; values around 0.2-0.3 are usually gentle and stable.",
         )
-        ttk.Button(smooth_tab, text="Apply Smooth", command=self.apply_smooth).grid(row=8, column=0, columnspan=2, sticky="ew", pady=(8, 0))
+        self._add_tooltip(
+            patch_n_min_widgets,
+            "Minimum number of grid points included in each diffusion stencil. "
+            "If the requested patch-width region has fewer points, the stencil expands by one grid point on both sides "
+            "repeatedly until this count is reached or the profile edge is reached.",
+        )
+        ttk.Button(smooth_tab, text="Apply Smooth", command=self.apply_smooth).grid(row=10, column=0, columnspan=2, sticky="ew", pady=(8, 0))
 
         delta_psi_widgets = self._add_field(shift_tab, "delta psi", self.shift_delta_var, 0)
         psi_ref_widgets = self._add_field(shift_tab, "psi ref", self.shift_ref_var, 1)
@@ -565,6 +575,7 @@ class ProfileEditorApp(tk.Tk):
         self.history = [ProfileData(profile.psi.copy(), profile.value.copy(), label="Original", path=path)]
         self.markers = []
         self.patch_markers = []
+        self.diffused_indices = []
         self.profile_label.configure(text=str(path))
         self._update_profile_count()
         self._suggest_fixed_sep_values()
@@ -603,6 +614,7 @@ class ProfileEditorApp(tk.Tk):
         self.history = [ProfileData(self.original.psi.copy(), self.original.value.copy(), label="Original", path=self.original.path)]
         self.markers = []
         self.patch_markers = []
+        self.diffused_indices = []
         self._update_profile_count()
         self._suggest_fixed_sep_values()
         self._refresh_history_list()
@@ -617,6 +629,7 @@ class ProfileEditorApp(tk.Tk):
         self.current = ProfileData(last.psi.copy(), last.value.copy(), label="Current", path=last.path)
         self.markers = []
         self.patch_markers = []
+        self.diffused_indices = []
         self._update_profile_count()
         self._refresh_history_list()
         self.status_var.set(f"Restored {last.label}.")
@@ -638,11 +651,20 @@ class ProfileEditorApp(tk.Tk):
                 patch_width=self._float(self.smooth_patch_width_var, "patch width"),
                 patch_passes=self._int(self.smooth_patch_passes_var, "patch passes"),
                 patch_alpha=self._float(self.smooth_patch_alpha_var, "patch alpha"),
+                patch_n_min=self._int(self.smooth_patch_n_min_var, "patch n_min"),
             )
         except Exception as exc:
             self._show_apply_error(exc)
             return
-        self._accept_result(result.psi, result.value, "Smooth top", result.markers, result.summary, result.patch_markers)
+        self._accept_result(
+            result.psi,
+            result.value,
+            "Smooth top",
+            result.markers,
+            result.summary,
+            result.patch_markers,
+            result.diffused_indices,
+        )
 
     def apply_shift(self) -> None:
         if not self._require_profile():
@@ -701,12 +723,14 @@ class ProfileEditorApp(tk.Tk):
         markers: list[float],
         summary: str,
         patch_markers: list[float] | None = None,
+        diffused_indices: list[int] | None = None,
     ) -> None:
         self.current = ProfileData(psi.copy(), value.copy(), label="Current", path=self.profile_path)
         version_label = f"{len(self.history)}: {label}"
         self.history.append(ProfileData(psi.copy(), value.copy(), label=version_label, path=self.profile_path))
         self.markers = markers
         self.patch_markers = patch_markers or []
+        self.diffused_indices = diffused_indices or []
         self._update_profile_count()
         self._suggest_fixed_sep_values()
         self._refresh_history_list()
@@ -726,6 +750,7 @@ class ProfileEditorApp(tk.Tk):
         self.history = self.history[: idx + 1]
         self.markers = []
         self.patch_markers = []
+        self.diffused_indices = []
         self._update_profile_count()
         self._suggest_fixed_sep_values()
         self._refresh_history_list()
@@ -1012,19 +1037,18 @@ class ProfileEditorApp(tk.Tk):
         for marker in self.patch_markers:
             for ax in self.axes:
                 ax.axvline(marker, color="tab:green", linestyle=":", linewidth=2.0, alpha=0.95)
-        if self.current and len(self.patch_markers) == 4:
-            g0, g1, g2, g3 = self.patch_markers
-            patch_mask = ((self.current.psi >= g0) & (self.current.psi <= g1)) | ((self.current.psi >= g2) & (self.current.psi <= g3))
-            if patch_mask.any():
+        if self.current and self.diffused_indices:
+            diffused_indices = [idx for idx in self.diffused_indices if 0 <= idx < len(self.current.psi)]
+            if diffused_indices:
                 d1, d2 = profile_derivatives(self.current.psi, self.current.value)
                 for ax, y_values, label in (
-                    (self.axes[0], self.current.value, "Diffusion-zone points"),
+                    (self.axes[0], self.current.value, "Diffusion stencil points"),
                     (self.axes[1], d1, None),
                     (self.axes[2], d2, None),
                 ):
                     ax.scatter(
-                        self.current.psi[patch_mask],
-                        y_values[patch_mask],
+                        self.current.psi[diffused_indices],
+                        y_values[diffused_indices],
                         s=70,
                         marker="$*$",
                         facecolors="tab:green",
