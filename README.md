@@ -38,4 +38,4 @@ python utils/profile_gui.py path/to/profile.prf --overlay path/to/experiment.prf
 - pedestal-top smoothing with C1 cubic flattening and optional post-diffusion passes in boundary patches
 - fixed-separatrix tanh or exponential connection with SOL floor
 
-<img src="docs/images/xgc_profile_gui_functions.png" alt="XGC profile modifier GUI functions" width="400">
+<img src="docs/images/xgc_profile_gui_functions.png" alt="XGC profile modifier GUI functions" width="700">
