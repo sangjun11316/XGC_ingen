@@ -28,10 +28,14 @@ python utils/profile_gui.py path/to/profile.prf --overlay path/to/experiment.prf
 ```
 
 The editor supports:
-- pedestal-top smoothing with C1 cubic flattening and optional post-diffusion passes in boundary patches
-- radial psi-axis shifting
-- fixed-separatrix tanh or exponential connection with SOL floor
+
+Comparison and output:
 - original/previous/current comparison with value, first derivative, and second derivative views
 - saving the modified profile back to TOMMS `.prf` format
+
+Profile modifications:
+- radial psi-axis shifting
+- pedestal-top smoothing with C1 cubic flattening and optional post-diffusion passes in boundary patches
+- fixed-separatrix tanh or exponential connection with SOL floor
 
 <img src="docs/images/xgc_profile_gui_functions.png" alt="XGC profile modifier GUI functions" width="400">
