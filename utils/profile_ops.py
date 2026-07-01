@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 
 import numpy as np
@@ -21,6 +21,7 @@ class TransformResult:
     value: np.ndarray
     markers: list[float]
     summary: str
+    patch_markers: list[float] = field(default_factory=list)
 
 
 def read_prf(filename: str | Path, *, require_strict_psi: bool = True) -> ProfileData:
@@ -94,6 +95,9 @@ def smooth_pedestal_top(
     half_window: int = 4,
     poly_deg: int = 3,
     smooth_strength: float = 0.4,
+    patch_width: float = 0.0,
+    patch_passes: int = 0,
+    patch_alpha: float = 0.25,
 ) -> TransformResult:
     _validate_profile(psi, value)
     if psi_start >= psi_end:
@@ -106,6 +110,16 @@ def smooth_pedestal_top(
         raise ValueError("poly_deg must be at least 1")
     if not 0.0 <= smooth_strength <= 1.0:
         raise ValueError("smooth_strength must be between 0 and 1")
+    if patch_width < 0.0:
+        raise ValueError("patch_width must be non-negative")
+    if patch_width > 0.0 and 2.0 * patch_width >= psi_end - psi_start:
+        raise ValueError("patch_width must be smaller than half the smoothing interval")
+    if patch_width > 0.0 and (psi_start - patch_width < psi.min() or psi_end + patch_width > psi.max()):
+        raise ValueError("patch_width extends outside the profile grid")
+    if patch_passes < 0:
+        raise ValueError("patch_passes must be non-negative")
+    if not 0.0 <= patch_alpha <= 0.5:
+        raise ValueError("patch_alpha must be between 0 and 0.5")
 
     y0, dy0 = _local_value_and_slope(psi, value, psi_start, half_window, poly_deg)
     y1, dy1 = _local_value_and_slope(psi, value, psi_end, half_window, poly_deg)
@@ -123,16 +137,26 @@ def smooth_pedestal_top(
         f"dy_start={dy0:.3e}->{dy0_mod:.3e}, dy_end={dy1:.3e}->{dy1_mod:.3e}, "
         f"secant={secant:.3e}, smooth_strength={smooth_strength:g}"
     )
-
     value_new = value.copy()
     mask = (psi >= psi_start) & (psi <= psi_end)
     value_new[mask] = func(psi[mask])
+
+    if patch_width > 0.0 and patch_passes > 0:
+        _diffuse_patch_slice(value_new, psi, psi_start - patch_width, psi_start + patch_width, patch_passes, patch_alpha)
+        _diffuse_patch_slice(value_new, psi, psi_end - patch_width, psi_end + patch_width, patch_passes, patch_alpha)
+        summary += f", patch_width={patch_width:g}, patch_passes={patch_passes}, patch_alpha={patch_alpha:g}"
+    patch_markers = (
+        [psi_start - patch_width, psi_start + patch_width, psi_end - patch_width, psi_end + patch_width]
+        if patch_width > 0.0 and patch_passes > 0
+        else []
+    )
 
     return TransformResult(
         psi=psi.copy(),
         value=value_new,
         markers=[psi_start, psi_end],
         summary=summary,
+        patch_markers=patch_markers,
     )
 
 
@@ -329,6 +353,30 @@ def _cubic_c1_segment(
         return h00 * y0 + h10 * dpsi * dy0_mod + h01 * y1 + h11 * dpsi * dy1_mod
 
     return func, dy0_mod, dy1_mod, secant
+
+
+def _diffuse_patch_slice(
+    value: np.ndarray,
+    psi: np.ndarray,
+    psi_left: float,
+    psi_right: float,
+    passes: int,
+    alpha: float,
+) -> None:
+    indices = np.flatnonzero((psi >= psi_left) & (psi <= psi_right))
+    if passes <= 0 or len(indices) < 3:
+        return
+
+    start = int(indices[0])
+    stop = int(indices[-1]) + 1
+    patch = value[start:stop].copy()
+    tmp = patch.copy()
+    for _ in range(passes):
+        tmp[0] = patch[0]
+        tmp[-1] = patch[-1]
+        tmp[1:-1] = alpha * patch[:-2] + (1.0 - 2.0 * alpha) * patch[1:-1] + alpha * patch[2:]
+        patch, tmp = tmp, patch
+    value[start:stop] = patch
 
 
 def _start_conditions(psi: np.ndarray, value: np.ndarray, psi_start: float) -> tuple[float, float]:
