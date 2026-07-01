@@ -54,11 +54,11 @@ def plot_profiles(filenames):
                         markersize=4, linestyle=ls, alpha=0.8, zorder=zo)
             
             # --- Plot 1: 1st Derivative ---
-            axs[1].plot(psi, d1, label=f"d/d$\psi$ {label_str}", color=c, marker=m, 
+            axs[1].plot(psi, d1, label=fr"d/d$\psi$ {label_str}", color=c, marker=m,
                         markersize=4, linestyle=ls, alpha=0.8, zorder=zo)
 
             # --- Plot 2: 2nd Derivative ---
-            axs[2].plot(psi, d2, label=f"d$^2$/d$\psi^2$ {label_str}", color=c, marker=m, 
+            axs[2].plot(psi, d2, label=fr"d$^2$/d$\psi^2$ {label_str}", color=c, marker=m,
                         markersize=4, linestyle=ls, alpha=0.8)
             
         except Exception as e:

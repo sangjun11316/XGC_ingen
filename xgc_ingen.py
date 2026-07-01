@@ -6,7 +6,7 @@ matplotlib.use('TkAgg') # to enable interactive backend
 import matplotlib.pyplot as plt
 from matplotlib.widgets import TextBox
 
-from scipy.interpolate import interp1d, interp2d, RectBivariateSpline # RectBivariateSpline is often better than interp2d
+from scipy.interpolate import interp1d, RectBivariateSpline # RectBivariateSpline is often better than interp2d
 from pathlib import Path
 
 import configparser
