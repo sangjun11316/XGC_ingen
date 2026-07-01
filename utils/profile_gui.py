@@ -103,6 +103,7 @@ class ProfileEditorApp(tk.Tk):
         self.patch_markers: list[float] = []
         self.diffused_indices: list[int] = []
         self.overlays: list[ProfileData] = []
+        self.overlay_colors: list[str] = []
         self.experiments: list[ProfileData] = []
         self.experiment_scales: list[str] = []
         self._experiment_scale_editor = None
@@ -766,6 +767,17 @@ class ProfileEditorApp(tk.Tk):
             self.history_list.selection_set(len(self.history) - 1)
             self.history_list.see(len(self.history) - 1)
 
+    def _overlay_palette(self) -> list[str]:
+        return ["tab:blue", "tab:orange", "tab:green", "tab:cyan", "tab:olive", "tab:purple", "tab:brown", "tab:gray"]
+
+    def _next_overlay_color(self) -> str:
+        palette = self._overlay_palette()
+        used = set(self.overlay_colors)
+        for color in palette:
+            if color not in used:
+                return color
+        return palette[len(self.overlay_colors) % len(palette)]
+
     def add_overlay_dialog(self) -> None:
         filenames = filedialog.askopenfilenames(
             title="Add overlay profiles",
@@ -774,13 +786,14 @@ class ProfileEditorApp(tk.Tk):
         for filename in filenames:
             self.add_overlay(Path(filename))
 
-    def add_overlay(self, path: Path) -> None:
+    def add_overlay(self, path: Path, color: str | None = None) -> None:
         try:
             profile = read_prf(path)
         except Exception as exc:
             messagebox.showerror("Could not open overlay", str(exc))
             return
         self.overlays.append(profile)
+        self.overlay_colors.append(color if color else self._next_overlay_color())
         self.overlay_list.insert(tk.END, profile.label)
         self.status_var.set(f"Added overlay {profile.label}.")
         self.refresh_plot()
@@ -792,6 +805,7 @@ class ProfileEditorApp(tk.Tk):
         for idx in reversed(selection):
             self.overlay_list.delete(idx)
             self.overlays.pop(idx)
+            self.overlay_colors.pop(idx)
         self.refresh_plot()
 
     def add_experiment_dialog(self) -> None:
@@ -829,9 +843,14 @@ class ProfileEditorApp(tk.Tk):
             self.load_profile(profile_path)
 
         for item in data.get("overlays", []):
-            path = self._path_from_session(item)
+            color = None
+            path_item = item
+            if isinstance(item, dict):
+                path_item = item.get("path")
+                color = item.get("color")
+            path = self._path_from_session(path_item)
             if path:
-                self.add_overlay(path)
+                self.add_overlay(path, color=color)
 
         for item in data.get("experiments", []):
             scale = ""
@@ -851,7 +870,11 @@ class ProfileEditorApp(tk.Tk):
         data = {
             "closed_at": datetime.now().isoformat(timespec="seconds"),
             "profile": str(self.profile_path) if self.profile_path else None,
-            "overlays": [str(profile.path) for profile in self.overlays if profile.path],
+            "overlays": [
+                {"path": str(profile.path), "color": self.overlay_colors[i] if i < len(self.overlay_colors) else self._overlay_palette()[0]}
+                for i, profile in enumerate(self.overlays)
+                if profile.path
+            ],
             "experiments": [
                 {"path": str(profile.path), "scale": self.experiment_scales[i] if i < len(self.experiment_scales) else ""}
                 for i, profile in enumerate(self.experiments)
@@ -991,9 +1014,9 @@ class ProfileEditorApp(tk.Tk):
             zorder=7,
         )
 
-        overlay_colors = ["b", "g", "c", "y", "tab:orange", "tab:purple", "tab:brown", "tab:pink"]
+        overlay_palette = self._overlay_palette()
         for i, overlay in enumerate(self.overlays):
-            color = overlay_colors[i % len(overlay_colors)]
+            color = self.overlay_colors[i] if i < len(self.overlay_colors) else overlay_palette[i % len(overlay_palette)]
             self._plot_profile(overlay, overlay.label, color=color, linestyle="-", linewidth=2.0, alpha=0.9, zorder=3)
 
         exp_colors = ["b", "r", "g", "m", "c", "y"]
@@ -1027,7 +1050,7 @@ class ProfileEditorApp(tk.Tk):
                         edgecolors=color,
                         linewidths=1.2,
                         alpha=0.55,
-                        label=f"Exp x{scale:g}: {experiment.label}",
+                        label=f"Exp x {scale_text}: {experiment.label}",
                         zorder=9,
                     )
 
