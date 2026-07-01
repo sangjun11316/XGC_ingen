@@ -12,7 +12,7 @@ $ python ../xgc_ingen.py
 The profile utilities have a GUI wrapper for the common modification workflow:
 
 ```sh
-python utils/profile_gui.py path/to/profile.prf
+python utils/profile_gui.py
 ```
 
 Optional experimental overlays can be added at launch or from the GUI:
