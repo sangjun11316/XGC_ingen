@@ -221,7 +221,7 @@ class Eqdsk:
 
         return self.area, self.volume
 
-    def plot_overview(self):
+    def plot_overview(self, wall_file=''):
         if not hasattr(self, 'psinrz'):
             print("g-file not read or processed.")
             return
@@ -257,6 +257,20 @@ class Eqdsk:
         fig.colorbar(cntr, ax=ax, label=r'Normalized Poloidal Flux ($\psi_N$)')
         ax.plot(self.rzsep[:, 0], self.rzsep[:, 1], 'tab:orange', linewidth=2, label='Separatrix')
         ax.plot(self.rzlim[:, 0], self.rzlim[:, 1], 'k', linewidth=2, label='Limiter')
+        if wall_file:
+            try:
+                wall_r, wall_z = read_prf(wall_file, 'wall')
+                ax.plot(
+                    wall_r,
+                    wall_z,
+                    'o-',
+                    color='r',
+                    linewidth=2,
+                    markersize=6,
+                    label='Wall file',
+                )
+            except Exception as e:
+                print(f"{PREFIX_ERRORS}Warning: Could not draw wall file {wall_file}: {e}")
         ax.plot(self.rmag, self.zmag, 'kx', markersize=10, mew=2, label='Magnetic Axis')
         ax.set_xlabel('R [m]')
         ax.set_ylabel('Z [m]')
@@ -434,7 +448,7 @@ class TommsInputGenerator:
             print(f"{PREFIX_ERRORS}Error loading equilibrium file: {e}")
             self.equilibrium_loaded = False
 
-        self.eq.plot_overview()
+        self.eq.plot_overview(self.params['wall_file'])
 
     def _get_midplane_mapping(self):
         print("\n>> get midplane mapping")

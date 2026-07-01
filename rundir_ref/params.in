@@ -1,0 +1,25 @@
+[TOMMS ingen parameters]
+
+# discharge
+g_file  = ./inputs/geqdsk_ECBC_ITG_for_ECP_beta_0p25_FLOW
+te_file = ./inputs/ECBC_te.dat
+ti_file = ./inputs/ECBC_ti.dat
+ne_file = ./inputs/ECBC_den_bet00p500.dat
+
+# If additional wall files are provided, they replace the limiter structure defined in the EQDSK file.
+#wall_file = ./inputs/custom_wall.txt
+
+# general parameters
+num_mid       = 1000
+dr_scale_psin = 0.0, 0.2, 0.3, 0.5, 0.7, 1.0, 1.05, 1.1
+dr_scale_fac  = 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0,  2.0
+dr_min        = 1.5e-3
+pol_scale_fac = 1.0
+
+pol_core_reduction_fac = 1.0
+
+# output
+output_dir       = ./outputs
+output_surf_file = surf_xgc1.txt
+output_dpol_file = dpol_xgc1.txt
+output_wall_file = wallcurve.txt
