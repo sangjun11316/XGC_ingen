@@ -2,11 +2,15 @@
 Python workflow for preparing TOMMS mesh generation
 
 # Example usage
-$ mkdir rundir
-$ cd rundir
+```sh
+mkdir rundir
+cd rundir
 
 # After preparing 'inputs' and 'params.in'
-$ python ../xgc_ingen.py
+python ../xgc_ingen.py
+```
+
+<img src="docs/images/xgc_ingen_docs.png" alt="XGC ingen procedure" width="700">
 
 # Profile editor
 The profile utilities have a GUI wrapper for the common modification workflow:
@@ -15,7 +19,9 @@ The profile utilities have a GUI wrapper for the common modification workflow:
 python utils/profile_gui.py
 ```
 
-Optional experimental overlays can be added at launch or from the GUI:
+<img src="docs/images/xgc_profile_gui_overall.png" alt="XGC profile modifier GUI overall" width="700">
+
+Optional GUI launch with files:
 
 ```sh
 python utils/profile_gui.py path/to/profile.prf --overlay path/to/experiment.prf
@@ -27,3 +33,5 @@ The editor supports:
 - fixed-separatrix tanh or exponential connection with SOL floor
 - original/previous/current comparison with value, first derivative, and second derivative views
 - saving the modified profile back to TOMMS `.prf` format
+
+<img src="docs/images/xgc_profile_gui_functions.png" alt="XGC profile modifier GUI functions" width="400">
