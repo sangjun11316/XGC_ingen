@@ -10,6 +10,7 @@ from pathlib import Path
 from tkinter import filedialog, messagebox, ttk
 
 import matplotlib
+import numpy as np
 
 matplotlib.use("TkAgg")
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg, NavigationToolbar2Tk
@@ -128,8 +129,8 @@ class ProfileEditorApp(tk.Tk):
         self.xmin_var = tk.StringVar(value="")
         self.xmax_var = tk.StringVar(value="")
 
-        self.smooth_start_var = tk.StringVar(value="0.94")
-        self.smooth_end_var = tk.StringVar(value="0.99")
+        self.smooth_start_var = tk.StringVar(value="0.85")
+        self.smooth_end_var = tk.StringVar(value="0.95")
         self.smooth_half_window_var = tk.StringVar(value="4")
         self.smooth_poly_deg_var = tk.StringVar(value="3")
         self.smooth_strength_var = tk.StringVar(value="0.4")
@@ -149,6 +150,8 @@ class ProfileEditorApp(tk.Tk):
         self.fixed_k_var = tk.StringVar(value="-5.0")
         self.fixed_psimax_var = tk.StringVar(value="1.3")
         self.fixed_use_target_var = tk.BooleanVar(value=True)
+        self.fixed_sep_var.trace_add("write", lambda *_: self._suggest_fixed_sep_values())
+        self.fixed_psimax_var.trace_add("write", lambda *_: self._suggest_fixed_sep_values())
 
     def _build_layout(self) -> None:
         self.columnconfigure(0, weight=0)
@@ -564,6 +567,7 @@ class ProfileEditorApp(tk.Tk):
         self.patch_markers = []
         self.profile_label.configure(text=str(path))
         self._update_profile_count()
+        self._suggest_fixed_sep_values()
         self._refresh_history_list()
         self.status_var.set(f"Loaded {path.name} with {len(profile.psi)} points.")
         self.refresh_plot(preserve_view=False)
@@ -600,6 +604,7 @@ class ProfileEditorApp(tk.Tk):
         self.markers = []
         self.patch_markers = []
         self._update_profile_count()
+        self._suggest_fixed_sep_values()
         self._refresh_history_list()
         self.status_var.set("Reset to original profile.")
         self.refresh_plot(preserve_view=False)
@@ -615,6 +620,7 @@ class ProfileEditorApp(tk.Tk):
         self._update_profile_count()
         self._refresh_history_list()
         self.status_var.set(f"Restored {last.label}.")
+        self._suggest_fixed_sep_values()
         self.refresh_plot()
 
     def apply_smooth(self) -> None:
@@ -702,6 +708,7 @@ class ProfileEditorApp(tk.Tk):
         self.markers = markers
         self.patch_markers = patch_markers or []
         self._update_profile_count()
+        self._suggest_fixed_sep_values()
         self._refresh_history_list()
         self.status_var.set(summary)
         self.refresh_plot()
@@ -720,6 +727,7 @@ class ProfileEditorApp(tk.Tk):
         self.markers = []
         self.patch_markers = []
         self._update_profile_count()
+        self._suggest_fixed_sep_values()
         self._refresh_history_list()
         self.status_var.set(f"Restored {selected.label}.")
         self.refresh_plot()
@@ -1138,6 +1146,29 @@ class ProfileEditorApp(tk.Tk):
             self.current_points_var.set("Current grid points: -")
         else:
             self.current_points_var.set(f"Current grid points: {len(self.current.psi)}")
+
+    def _suggest_fixed_sep_values(self) -> None:
+        if self.current is None:
+            return
+        try:
+            psi_sep = float(self.fixed_sep_var.get())
+            psi_max = float(self.fixed_psimax_var.get())
+        except ValueError:
+            return
+        target_sep = self._sample_current_profile(psi_sep)
+        floor = self._sample_current_profile(psi_max)
+        self.fixed_target_var.set(self._format_suggested_value(target_sep))
+        self.fixed_floor_var.set(self._format_suggested_value(floor))
+
+    def _sample_current_profile(self, psi_value: float) -> float:
+        return float(np.interp(psi_value, self.current.psi, self.current.value))
+
+    def _format_suggested_value(self, value: float) -> str:
+        if value == 0.0:
+            return "0.000"
+        if abs(value) >= 1.0e5 or abs(value) < 1.0e-2:
+            return f"{value:.3e}"
+        return f"{value:.3f}"
 
     def _parse_scale_expression(self, text: str) -> float:
         allowed_binops = (ast.Add, ast.Sub, ast.Mult, ast.Div, ast.Pow)
