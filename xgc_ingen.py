@@ -729,17 +729,18 @@ class TommsInputGenerator:
 
         fig,ax = plt.subplots(figsize=(6,5))
 
-        ax.plot(psin, rhoi,        c='tab:blue',   label=r'$\rho_i$')
-        ax.plot(psin, dr_target,   c='tab:orange', label=r'$\Delta r_{target}$')
-        ax.plot(psin, dpol_target, c='tab:green',  label=r'$\Delta pol_{target}$')
-        ax.plot(psin, L_ne/3, c='tab:red',    ls='--', label=r'$L_{n_e} x 1/3$')
-        ax.plot(psin, L_te/3, c='tab:purple', ls='--', label=r'$L_{T_e} x 1/3$')
-        ax.plot(psin, L_ti/3, c='tab:brown',  ls='--', label=r'$L_{T_i} x 1/3$')
+        ax.plot(psin, rhoi*1E3,        c='tab:blue',   label=r'$\rho_i$')
+        ax.plot(psin, dr_target*1E3,   c='tab:orange', label=r'$\Delta r_{target}$')
+        ax.plot(psin, dpol_target*1E3, c='tab:green',  label=r'$\Delta pol_{target}$')
+        ax.plot(psin, L_ne/3*1E3, c='tab:red',    ls='--', label=r'$L_{n_e} x 1/3$')
+        ax.plot(psin, L_te/3*1E3, c='tab:purple', ls='--', label=r'$L_{T_e} x 1/3$')
+        ax.plot(psin, L_ti/3*1E3, c='tab:brown',  ls='--', label=r'$L_{T_i} x 1/3$')
 
         ax.set_xlabel(r'Normalized Poloidal Flux ($\psi_N$)')
-        ax.set_ylabel('Length Scale [m]')
+        ax.set_ylabel('Length Scale [mm]')
         ax.set_title('Target Resolution vs. Ion Gyroradius and Profile Length Scales')
-        ax.set_yscale('log')
+        ax.set_ylim(0, 10) # mm
+        # ax.set_yscale('log')
         ax.legend()
         ax.grid(True, which="both", alpha=0.5)
 
