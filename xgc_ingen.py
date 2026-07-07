@@ -57,6 +57,19 @@ def is_monotonic(arr):
   diffs = np.diff(arr)
   return np.all(diffs >= 0) or np.all(diffs <= 0)
 
+def profile_length_scale(radius, values):
+    radius = np.asarray(radius)
+    values = np.asarray(values)
+
+    edge_order = 2 if len(values) > 2 else 1
+    dval_dr = np.gradient(values, radius, edge_order=edge_order)
+
+    with np.errstate(divide='ignore', invalid='ignore'):
+        length_scale = np.abs(values) / np.abs(dval_dr)
+
+    length_scale[~np.isfinite(length_scale)] = np.nan
+    return length_scale
+
 def densify_line(r_coords, z_coords, max_seg_length):
     new_r = [r_coords[0]]
     new_z = [z_coords[0]]
@@ -630,13 +643,7 @@ class TommsInputGenerator:
         tau_transit = 2*np.pi * self.eq.rmag / np.sqrt(2*main_ion_characteristic_energy_keV*1e3*UNIT_CHARGE / mi)
 
         # Ti length scale
-        dti_dr = np.zeros_like(ti_ev)
-        dti_dr[1:-1] = (ti_ev[2:] - ti_ev[:-2]) / (rmid[2:] - rmid[:-2])
-        dti_dr[0]  = (ti_ev[1] - ti_ev[0]) / (rmid[1] - rmid[0])
-        dti_dr[-1] = (ti_ev[-1] - ti_ev[-2]) / (rmid[-1] - rmid[-2])
-        dti_dr[dti_dr == 0] = 1e-14
-
-        L_ti = ti_ev / (np.abs(dti_dr)) # m
+        L_ti = profile_length_scale(rmid, ti_ev)
 
         # Banana orbit width
         eps = (rmid - self.eq.rmag) / self.eq.rmag  # inverse aspect ratio
@@ -716,18 +723,25 @@ class TommsInputGenerator:
         rhoi        = self.resolution['rhoi']
         dr_target   = self.resolution['dr_target']
         dpol_target = self.resolution['dpol_target']
+        L_ne        = profile_length_scale(rmid, self.prof_interp['ne'])
+        L_te        = profile_length_scale(rmid, self.prof_interp['te'])
+        L_ti        = profile_length_scale(rmid, self.prof_interp['ti'])
 
         fig,ax = plt.subplots(figsize=(6,5))
 
-        ax.plot(psin, rhoi, c='tab:blue', label='rhoi')
-        ax.plot(psin, dr_target, c='tab:orange', label='dr_target')
-        ax.plot(psin, dpol_target, c='tab:green', label='dpol_target')
+        ax.plot(psin, rhoi,        c='tab:blue',   label=r'$\rho_i$')
+        ax.plot(psin, dr_target,   c='tab:orange', label=r'$\Delta r_{target}$')
+        ax.plot(psin, dpol_target, c='tab:green',  label=r'$\Delta pol_{target}$')
+        ax.plot(psin, L_ne/3, c='tab:red',    ls='--', label=r'$L_{n_e} x 1/3$')
+        ax.plot(psin, L_te/3, c='tab:purple', ls='--', label=r'$L_{T_e} x 1/3$')
+        ax.plot(psin, L_ti/3, c='tab:brown',  ls='--', label=r'$L_{T_i} x 1/3$')
 
         ax.set_xlabel(r'Normalized Poloidal Flux ($\psi_N$)')
         ax.set_ylabel('Length Scale [m]')
-        ax.set_title('Target Resolution vs. Ion Gyroradius')
+        ax.set_title('Target Resolution vs. Ion Gyroradius and Profile Length Scales')
+        ax.set_yscale('log')
         ax.legend()
-        ax.grid(True, alpha=0.5)
+        ax.grid(True, which="both", alpha=0.5)
 
         plt.tight_layout()
         plt.show()
